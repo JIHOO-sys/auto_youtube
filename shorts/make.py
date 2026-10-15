@@ -9,6 +9,8 @@ script.json:
      "style": "optional "pick": 하루한픽 layout - white header/footer, no TTS, original-audio scenes only,
                with "comment" (one reaction line under the video) and "credit" (출처 line)",
      "voice": "optional Google TTS voice name (default VOICE)",
+     "dub": "optional true for animal sources: narration (the animal's inner voice) may sit on any scene,
+             with the source's own sound kept quietly underneath",
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
@@ -196,6 +198,17 @@ def make(script, out):
                     s = {**s, "say": s.get("caption", ""), "src": [a]}
             else:
                 tts(s["say"], wav, script.get("voice", VOICE))
+                if script.get("dub") and s.get("src"):
+                    # animal dub: the barks/meows stay audible under the voice
+                    d0, n = duration(wav), len(s["src"])
+                    beds = []
+                    for j, st in enumerate(s["src"]):
+                        beds += ["-ss", f"{st:.2f}", "-t", f"{d0 / n:.3f}", "-i", script["source"]]
+                    mixed = os.path.join(tmp, f"{i}_dub.wav")
+                    ff("-i", wav, *beds, "-filter_complex",
+                       "".join(f"[{j + 1}:a]" for j in range(n)) + f"concat=n={n}:v=0:a=1,volume=0.3[b];"
+                       "[0:a][b]amix=inputs=2:duration=first:normalize=0", "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", mixed)
+                    os.replace(mixed, wav)
             d = duration(wav)
             aparts.append(wav)
             # captions: spread over the scene by character count
@@ -244,7 +257,8 @@ if __name__ == "__main__":
     says = [i for i, s in enumerate(script["scenes"]) if s.get("say")]
     if script.get("style") == "pick" and says: sys.exit("pick style has no narration: use orig scenes only")
     # review style: narration only as the opening hook and the closing line; the middle is the people themselves
-    if script.get("source") and set(says) - {0, len(script["scenes"]) - 1}:
+    # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
+    if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
     need = (["GOOGLE_TTS_KEY"] if says else []) + ([] if script.get("source") else ["PIXABAY_API_KEY"])
     missing = [k for k in need if not os.environ.get(k)]
