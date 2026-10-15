@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""source.py - long-form source videos for 대신봐드림 review Shorts, from the Drive folder 롱폼원본.
+"""source.py - long-form source videos for 돌뚜뿌꾸 review Shorts, from the Drive folder 롱폼원본.
 
     python3 source.py suggest           # CC candidates to download, per category (read-only)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
