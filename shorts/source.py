@@ -3,7 +3,8 @@
 
     python3 source.py suggest           # CC candidates to download, per category (read-only)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
-    python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg
+    python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg, moves.txt
+    python3 source.py moves VIDEO        # motion/loudness per 2 s + liveliest windows (for dance sources without dialogue)
 
 File names should contain the YouTube id in brackets, e.g. "세븐틴 브이로그 [md5zNFKvfvE].mp4" (yt-dlp's default);
 otherwise the exact video title is looked up among CC videos.
@@ -105,6 +106,46 @@ def frames(video, out):
                     "fontsize=22:fontcolor=yellow:borderw=2,tile=6x4", "-frames:v", "1", out], check=True)
     return dur
 
+def series(args, key):
+    """Per-frame values of one ffmpeg metadata key, as [(seconds, value)]."""
+    out = subprocess.run(["ffmpeg", "-v", "error", *args, "-f", "null", "-"], capture_output=True, text=True, check=True).stdout
+    vals, t = [], None
+    for line in out.splitlines():
+        m = re.search(r"pts_time:([\d.]+)", line)
+        if m:
+            t = float(m.group(1))
+        elif line.startswith(key + "=") and t is not None:
+            v = line.split("=", 1)[1]
+            vals.append((t, float(v) if v not in ("-inf", "inf", "nan") else -90.0))
+    return vals
+
+def moves(video, window=20):
+    """Dance sources have no dialogue to pick moments by: score each 2 s by on-screen motion and loudness."""
+    motion = series(["-i", video, "-an", "-vf", "fps=4,scale=160:-2,format=gray,tblend=all_mode=difference,"
+                     "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=/dev/stdout"], "lavfi.signalstats.YAVG")
+    loud = series(["-i", video, "-vn", "-af", "aresample=8000,asetnsamples=n=4000,astats=metadata=1:reset=1,"
+                   "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=/dev/stdout"], "lavfi.astats.Overall.RMS_level")
+    bins = {}
+    for t, v in motion:
+        bins.setdefault(int(t // 2) * 2, [[], []])[0].append(v)
+    for t, v in loud:
+        bins.setdefault(int(t // 2) * 2, [[], []])[1].append(v)
+    avg = lambda xs, d: sum(xs) / len(xs) if xs else d
+    rows = [(t, avg(m, 0), avg(l, -90)) for t, (m, l) in sorted(bins.items())]
+    top = max((m for _, m, _ in rows), default=0) or 1
+    lines = [f"{t}\t{round(100 * m / top)}\t{l:.0f}dB" for t, m, l in rows]
+    # liveliest non-overlapping windows: motion counts only while the music is actually playing (> -35 dB)
+    score = {t: (m if l > -35 else 0) for t, m, l in rows}
+    wins = sorted(((sum(score.get(t + k, 0) for k in range(0, window, 2)), t) for t in score), reverse=True)
+    best = []
+    for sc, t in wins:
+        if all(abs(t - b) >= window for b in best) and t + window <= rows[-1][0] + 2:
+            best.append(t)
+        if len(best) == 3:
+            break
+    return ["# start_sec  motion(0-100)  loudness", *lines,
+            "# liveliest %ds windows: " % window + ", ".join(f"{t}-{t + window}" for t in best)]
+
 def cmd_fetch(file_id, outdir):
     os.makedirs(outdir, exist_ok=True)
     files = drive_ls(FOLDER)
@@ -125,6 +166,10 @@ def cmd_fetch(file_id, outdir):
             lines = []
     open(os.path.join(outdir, "transcript.txt"), "w").write("\n".join(lines))
     dur = frames(video, os.path.join(outdir, "frames.jpg"))
+    try:
+        open(os.path.join(outdir, "moves.txt"), "w").write("\n".join(moves(video)))
+    except Exception as e:  # only matters for dance sources
+        print(f"warning: moves.txt failed ({e})", file=sys.stderr)
     print(f"video={video} duration={dur:.0f}s license={meta['license']} transcript_lines={len(lines)}")
     if meta["license"] != "creativeCommon":
         print("WARNING: not Creative Commons on YouTube - do not use this source", file=sys.stderr)
@@ -134,6 +179,8 @@ if __name__ == "__main__":
         cmd_suggest()
     elif len(sys.argv) >= 2 and sys.argv[1] == "list":
         cmd_list()
+    elif len(sys.argv) == 3 and sys.argv[1] == "moves":
+        print("\n".join(moves(sys.argv[2])))
     elif len(sys.argv) == 4 and sys.argv[1] == "fetch":
         cmd_fetch(sys.argv[2], sys.argv[3])
     else:
