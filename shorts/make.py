@@ -7,9 +7,7 @@
 script.json:
     {"title": "상단 고정 제목\\n*강조*는 노란색",
      "style": "optional "pick": 하루한픽 layout - white header/footer, no TTS, original-audio scenes only,
-               with "comment" (one reaction line under the video) and "credit" (출처 line);
-               "dance": same layout for dance/performance sources - orig scenes with their music, no captions
-               needed, short audio fades at each cut so the music does not click",
+               with "comment" (one reaction line under the video) and "credit" (출처 line)",
      "voice": "optional Google TTS voice name (default VOICE)",
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
@@ -130,7 +128,7 @@ def chunks(say):
 def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
-def ass(title, timeline, cap_y=1180, pick=None, end=0):
+def ass(title, timeline, cap_y=1180, pick=None):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -151,7 +149,7 @@ Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    end = end or (timeline[-1][1] if timeline else 0)  # dance shorts may have no captions at all
+    end = timeline[-1][1] if timeline else 0
     t = title.replace("\\n", "\n").replace("\n", r"\N")
     hl, base = (r"{\c&H7E2EFF&}", r"{\c&H000000&}") if pick else (YELLOW, r"{\c&HFFFFFF&}")
     while "*" in t:
@@ -172,8 +170,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def make(script, out):
     with tempfile.TemporaryDirectory() as tmp:
         used, fontsdir, t = set(), font(), 0.0
-        pick = script if script.get("style") in ("pick", "dance") else None
-        dance = script.get("style") == "dance"
+        pick = script if script.get("style") == "pick" else None
         if pick:
             w, h = subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                             "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2]
@@ -185,9 +182,7 @@ def make(script, out):
             if s.get("orig"):
                 # the people's own voices: play the source moment with its sound, captioned
                 a, b = s["orig"]
-                # dance: music runs through the cuts, so fade each one in/out instead of chopping mid-beat
-                fade = ["-af", f"afade=t=in:d=0.15,afade=t=out:st={max(b - a - 0.5, 0):.2f}:d=0.5"] if dance else []
-                ff("-ss", f"{a:.2f}", "-t", f"{b - a:.2f}", "-i", script["source"], "-vn", *fade,
+                ff("-ss", f"{a:.2f}", "-t", f"{b - a:.2f}", "-i", script["source"], "-vn",
                    "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", wav)
                 if s.get("lines"):
                     # [[start sec, speaker or "", text], ...] -> one caption per line, speaker name in pink
@@ -233,7 +228,7 @@ def make(script, out):
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
         sub = os.path.join(tmp, "s.ass")
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
-        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t))
+        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick))
         # no background music: original voices and the narration only
         ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
            "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
@@ -247,9 +242,7 @@ if __name__ == "__main__":
     a = p.parse_args()
     script = json.load(open(a.script))
     says = [i for i, s in enumerate(script["scenes"]) if s.get("say")]
-    if script.get("style") in ("pick", "dance") and says: sys.exit(f"{script['style']} style has no narration: use orig scenes only")
-    if script.get("style") == "dance" and not all(s.get("orig") for s in script["scenes"]):
-        sys.exit("dance style: every scene must be an orig [start, end] range of the source")
+    if script.get("style") == "pick" and says: sys.exit("pick style has no narration: use orig scenes only")
     # review style: narration only as the opening hook and the closing line; the middle is the people themselves
     if script.get("source") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
