@@ -130,7 +130,7 @@ def chunks(say):
 def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
-def ass(title, timeline, cap_y=1180, pick=None):
+def ass(title, timeline, cap_y=1180, pick=None, end=0):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -151,7 +151,7 @@ Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    end = timeline[-1][1] if timeline else 0
+    end = end or (timeline[-1][1] if timeline else 0)  # pick scenes may carry no captions at all
     t = title.replace("\\n", "\n").replace("\n", r"\N")
     hl, base = (r"{\c&H7E2EFF&}", r"{\c&H000000&}") if pick else (YELLOW, r"{\c&HFFFFFF&}")
     while "*" in t:
@@ -241,7 +241,7 @@ def make(script, out):
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
         sub = os.path.join(tmp, "s.ass")
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
-        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick))
+        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t))
         # no background music: original voices and the narration only
         ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
            "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
