@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""source.py - long-form source videos for 돌뚜뿌꾸 review Shorts, from the Drive folder 롱폼원본.
+"""source.py - long-form animal source videos for 돌뚜뿌꾸 Shorts, from the Drive folder 롱폼원본.
 
     python3 source.py suggest           # CC candidates to download, per category (read-only)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
     python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg, moves.txt
     python3 source.py moves VIDEO        # motion/loudness per 2 s + liveliest windows (animal sources have little dialogue)
 
-File names should contain the YouTube id in brackets, e.g. "세븐틴 브이로그 [md5zNFKvfvE].mp4" (yt-dlp's default);
+File names should contain the YouTube id in brackets, e.g. "간식 훔쳐먹은 강아지 [N9UJE7TMe1I].mp4" (yt-dlp's default);
 otherwise the exact video title is looked up among CC videos.
 A subtitle file with the same name (.srt/.vtt) is used as the transcript; otherwise faster-whisper transcribes.
 """
@@ -40,19 +40,17 @@ def find_id(name):
             return h["id"]["videoId"]
     return ""
 
-SEARCHES = ["아이돌 브이로그", "아이돌 비하인드", "kpop behind", "jpop", "pop music behind", "연예인 비하인드",
-            "브이로그", "해외 생활", "외국 이야기", "로블록스", "생활꿀팁",
-            "예능", "예능 레전드", "코미디빅리그", "1박2일", "개그", "몰래카메라", "웃긴 영상",
-            "강아지", "고양이", "반려동물 브이로그", "funny dog", "funny cat"]
+SEARCHES = ["웃긴 강아지", "웃긴 고양이", "강아지 반응", "고양이 반응", "강아지 브이로그", "고양이 브이로그",
+            "강아지 일상", "고양이 집사", "댕댕이", "반려동물 브이로그", "funny dog", "funny cat"]
 
 def cmd_suggest():
     """CC candidates per category (read-only): already used/downloaded ids removed, best first by views."""
     seen = {src for _, src in recent()} | {find_id(f["name"]) for f in drive_ls(FOLDER, "video/")}
-    after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365 * 5)).strftime("%Y-%m-%dT%H:%M:%SZ")
     for q in SEARCHES:
         ids = [h["id"]["videoId"] for h in api("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
             {"part": "snippet", "type": "video", "videoLicense": "creativeCommon", "q": q, "maxResults": 15,
-             "order": "viewCount", "publishedAfter": after, "relevanceLanguage": "ko"}))["items"]]
+             "order": "viewCount", "publishedAfter": after, "relevanceLanguage": "ko", "videoDuration": "medium"}))["items"]]
         ids = [i for i in ids if i not in seen]
         if not ids:
             continue
