@@ -40,19 +40,20 @@ def find_id(name):
             return h["id"]["videoId"]
     return ""
 
-SEARCHES = ["웃긴 강아지", "웃긴 고양이", "강아지 반응", "고양이 반응", "강아지 브이로그", "고양이 브이로그",
-            "강아지 일상", "고양이 집사", "댕댕이", "반려동물 브이로그", "funny dog", "funny cat",
-            "토끼", "햄스터", "고슴도치", "수달", "카피바라", "판다", "아기 동물", "동물원",
-            "funny rabbit", "hamster", "otter", "capybara", "baby goat", "funny animals"]
+# Korean and Japanese channels only: their voices sit naturally under Korean dubbing and subtitles
+SEARCHES = [(q, "ko") for q in ["웃긴 강아지", "웃긴 고양이", "강아지 반응", "고양이 반응", "강아지 브이로그", "고양이 브이로그",
+                                "강아지 일상", "고양이 집사", "댕댕이", "반려동물 브이로그",
+                                "토끼", "햄스터", "고슴도치", "수달", "카피바라", "아기 동물", "동물원"]] + \
+           [(q, "ja") for q in ["犬 おもしろ", "猫 おもしろ", "子猫", "犬 日常", "猫 日常", "カワウソ"]]
 
 def cmd_suggest():
     """CC candidates per category (read-only): already used/downloaded ids removed, best first by views."""
     seen = {src for _, src in recent()} | {find_id(f["name"]) for f in drive_ls(FOLDER, "video/")}
     after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365 * 5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    for q in SEARCHES:
+    for q, lang in SEARCHES:
         ids = [h["id"]["videoId"] for h in api("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
             {"part": "snippet", "type": "video", "videoLicense": "creativeCommon", "q": q, "maxResults": 15,
-             "order": "viewCount", "publishedAfter": after, "relevanceLanguage": "ko", "videoDuration": "medium"}))["items"]]
+             "order": "viewCount", "publishedAfter": after, "relevanceLanguage": lang, "videoDuration": "medium"}))["items"]]
         ids = [i for i in ids if i not in seen]
         if not ids:
             continue
