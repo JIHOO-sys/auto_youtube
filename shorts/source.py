@@ -41,7 +41,9 @@ def find_id(name):
     return ""
 
 SEARCHES = ["웃긴 강아지", "웃긴 고양이", "강아지 반응", "고양이 반응", "강아지 브이로그", "고양이 브이로그",
-            "강아지 일상", "고양이 집사", "댕댕이", "반려동물 브이로그", "funny dog", "funny cat"]
+            "강아지 일상", "고양이 집사", "댕댕이", "반려동물 브이로그", "funny dog", "funny cat",
+            "토끼", "햄스터", "고슴도치", "수달", "카피바라", "판다", "아기 동물", "동물원",
+            "funny rabbit", "hamster", "otter", "capybara", "baby goat", "funny animals"]
 
 def cmd_suggest():
     """CC candidates per category (read-only): already used/downloaded ids removed, best first by views."""
