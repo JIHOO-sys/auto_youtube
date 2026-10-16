@@ -3,7 +3,7 @@
 
     python3 upload.py video.mp4 --title "..." [--desc "..."] [--privacy private|unlisted|public]
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
-    python3 upload.py --recent          # last 50 uploads: title <TAB> source YouTube id, to avoid repeats
+    python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
 Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
 (optional DRIVE_REFRESH_TOKEN: a different Google account for Drive, e.g. when the channel is a Brand Account).
@@ -67,10 +67,25 @@ def drive_get(file_id, path):
         shutil.copyfileobj(r, f)  # source videos can be GBs; stream, don't buffer
     return path
 
-def recent():
-    """(title, source YouTube id or "") of the last 50 uploads; the id comes from the 원본 link in the description."""
+def drive_trash(file_id):
+    """Move a Drive file to the trash (restorable for 30 days). Needs the full drive scope, not drive.readonly."""
+    req = urllib.request.Request(f"https://www.googleapis.com/drive/v3/files/{file_id}", method="PATCH",
+                                 data=json.dumps({"trashed": True}).encode(),
+                                 headers={"Authorization": f"Bearer {access_token(drive=True)}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)
+
+def recent(pages=20):
+    """(title, source YouTube id or "") of the channel's uploads, newest first (up to 1000); the id comes from the 원본 link in the description."""
     pl = api("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true")["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-    items = api(f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId={pl}")["items"]
+    items, tok = [], ""
+    # every upload counts toward its source's 3-Short limit, so read past the first page (1 quota unit each)
+    for _ in range(pages):
+        r = api(f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId={pl}" + (f"&pageToken={tok}" if tok else ""))
+        items += r["items"]
+        tok = r.get("nextPageToken")
+        if not tok:
+            break
     out = []
     for i in items:
         m = re.search(r"youtu\.be/([A-Za-z0-9_-]{11})", i["snippet"]["description"])

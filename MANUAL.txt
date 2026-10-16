@@ -102,7 +102,7 @@
   2. 앱 이름 shorts-uploader / 사용자 지원 이메일 <이메일> / 대상 [외부] / 연락처 <이메일> → 만들기
   3. [데이터 액세스](또는 범위) → [범위 추가 또는 삭제] → 아래 두 개를 "직접 입력" 칸에 넣고 [테이블에 추가] → 저장
        https://www.googleapis.com/auth/youtube
-       https://www.googleapis.com/auth/drive.readonly
+       https://www.googleapis.com/auth/drive
   4. [대상](또는 테스트 사용자) → [+ Add users] → <이메일> 추가
   5. 홈페이지 / 개인정보처리방침 주소는 6단계에서 만든 뒤 [브랜딩] 화면에 넣습니다.
   6. ★ [대상] → 게시 상태 [앱 게시] → 프로덕션 으로 바꾸기
@@ -123,7 +123,7 @@
      → OAuth Client ID / Client secret 에 2-6 값 붙여 넣기 → 창 닫기
      ※ 이걸 빼먹으면 나중에 unauthorized_client 오류가 납니다.
   3. 왼쪽 Step 1 아래 입력칸("Input your own scopes")에 아래 한 줄을 그대로 붙여 넣기
-       https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/drive.readonly
+       https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/drive
      → [Authorize APIs]
   4. 채널 계정 선택 → "Google에서 확인하지 않은 앱" → [고급] → [shorts-uploader(으)로 이동] → 모두 [허용]
   5. Step 2 화면 → [Exchange authorization code for tokens]
@@ -133,7 +133,7 @@
     브랜드 채널은 드라이브가 없으므로 토큰을 2개 받습니다. 3번 입력칸만 다르게 해서 2-7을 두 번 합니다.
       ① https://www.googleapis.com/auth/youtube 만 → 4번 계정 고르는 화면에서 "브랜드 채널" 선택
          → YT_REFRESH_TOKEN
-      ② https://www.googleapis.com/auth/drive.readonly 만 → "개인 계정" 선택
+      ② https://www.googleapis.com/auth/drive 만 → "개인 계정" 선택
          → DRIVE_REFRESH_TOKEN
     이 경우 3단계 드라이브 폴더는 개인 계정 드라이브에 만듭니다.
 
@@ -231,7 +231,8 @@
   3. 파일 탐색기 → 다운로드 → 롱폼원본 폴더 → 안의 파일(.mp4 와 .srt) 전부 선택
   4. 구글 드라이브의 롱폼원본 폴더 화면으로 끌어다 놓기
      ★ 파일 이름을 절대 바꾸지 마세요. 이름 끝의 [영문숫자11자리] 로 원본 영상을 찾습니다.
-  5. 다 쓴 원본(원본 하나당 쇼츠 3개)은 드라이브에서 지워도 됩니다.
+  5. 다 쓴 원본(원본 하나당 쇼츠 3개)은 루틴이 드라이브 휴지통으로 자동으로 옮깁니다 (30일 안에 복구 가능).
+     토큰을 drive.readonly 로 받았던 경우엔 자동 삭제가 안 되니 2-5 ③·2-7 을 drive 범위로 다시 하거나 직접 지우세요.
 
 원본을 직접 고르고 싶을 때
   유튜브 검색 → 필터 → 기능 → "크리에이티브 커먼즈" → 공식 채널(본인·소속사·방송사)이 올린 3분 이상 영상
