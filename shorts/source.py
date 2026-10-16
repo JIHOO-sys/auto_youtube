@@ -3,6 +3,7 @@
 
     python3 source.py suggest           # CC candidates to download, per category (read-only)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
+    python3 source.py clean             # move sources with 3 Shorts made (and their subtitles) to the Drive trash
     python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg, moves.txt
     python3 source.py moves VIDEO        # motion/loudness per 2 s + liveliest windows (animal sources have little dialogue)
 
@@ -11,7 +12,8 @@ otherwise the exact video title is looked up among CC videos.
 A subtitle file with the same name (.srt/.vtt) is used as the transcript; otherwise faster-whisper transcribes.
 """
 import datetime, html, json, os, re, subprocess, sys, urllib.parse
-from upload import api, drive_get, drive_ls, recent
+import urllib.error
+from upload import api, drive_get, drive_ls, drive_trash, recent
 
 FOLDER = "롱폼원본"
 YTID = re.compile(r"\[([A-Za-z0-9_-]{11})\]")
@@ -74,6 +76,28 @@ def cmd_list():
         n = used.get(vid, 0)
         status = "youtube id not found - skip" if not vid else ("done" if n >= SHORTS_PER_SOURCE else f"{n}/{SHORTS_PER_SOURCE} made")
         print(f"{f['id']}\t{vid}\t{status}\t{f['name']}")
+
+def cmd_clean():
+    """Trash 롱폼원본 videos that already have SHORTS_PER_SOURCE Shorts, plus their same-name subtitle files."""
+    used = {}
+    for _, src in recent():
+        used[src] = used.get(src, 0) + 1
+    files = drive_ls(FOLDER)
+    for f in [x for x in files if x["mimeType"].startswith("video/")]:
+        vid = find_id(f["name"])
+        if not vid or used.get(vid, 0) < SHORTS_PER_SOURCE:
+            continue
+        base = os.path.splitext(f["name"])[0]
+        subs = [x for x in files if x is not f and x["name"].startswith(base) and x["name"].endswith((".srt", ".vtt"))]
+        try:
+            for x in [f, *subs]:
+                drive_trash(x["id"])
+        except urllib.error.HTTPError as e:
+            if e.code == 403:  # token only has drive.readonly: leave the files, the user removes them by hand
+                print("skip: Drive token is read-only (drive.readonly) - re-issue it with the drive scope to auto-clean", file=sys.stderr)
+                return
+            raise
+        print(f"trashed\t{vid}\t{f['name']}" + (f" (+{len(subs)} subtitle)" if subs else ""))
 
 def srt_to_lines(text):
     """VTT/SRT -> '12.3 text' lines (start seconds)."""
@@ -181,6 +205,8 @@ if __name__ == "__main__":
         cmd_suggest()
     elif len(sys.argv) >= 2 and sys.argv[1] == "list":
         cmd_list()
+    elif len(sys.argv) >= 2 and sys.argv[1] == "clean":
+        cmd_clean()
     elif len(sys.argv) == 3 and sys.argv[1] == "moves":
         print("\n".join(moves(sys.argv[2])))
     elif len(sys.argv) == 4 and sys.argv[1] == "fetch":
