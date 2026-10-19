@@ -11,7 +11,7 @@ File names should contain the YouTube id in brackets, e.g. "간식 훔쳐먹은 
 otherwise the exact video title is looked up among CC videos.
 A subtitle file with the same name (.srt/.vtt) is used as the transcript; otherwise faster-whisper transcribes.
 """
-import datetime, html, json, os, re, subprocess, sys, urllib.parse
+import datetime, difflib, html, json, os, re, subprocess, sys, urllib.parse
 import urllib.error
 from upload import api, drive_get, drive_ls, drive_trash, recent
 
@@ -48,9 +48,22 @@ SEARCHES = [(q, "ko") for q in ["웃긴 강아지", "웃긴 고양이", "강아�
                                 "토끼", "햄스터", "고슴도치", "수달", "카피바라", "아기 동물", "동물원"]] + \
            [(q, "ja") for q in ["犬 おもしろ", "猫 おもしろ", "子猫", "犬 日常", "猫 日常", "カワウソ"]]
 
+SIMILAR = 0.7  # same channel and titles this alike = the same moment filmed twice (e.g. 아기 고양이 / 고양이들 반응)
+
+def norm_title(t):
+    return re.sub(r"[^0-9a-z가-힣ぁ-んァ-ン一-龥]", "", html.unescape(t).lower())
+
 def cmd_suggest():
-    """CC candidates per category (read-only): already used/downloaded ids removed, best first by views."""
+    """CC candidates per category (read-only): already used/downloaded ids and near-copies of them removed, best first by views."""
     seen = {src for _, src in recent()} | {find_id(f["name"]) for f in drive_ls(FOLDER, "video/")}
+    seen.discard("")
+    # channel + title of everything already used or downloaded, to drop look-alike videos from the same channel
+    known, ids = [], sorted(seen)
+    for k in range(0, len(ids), 50):
+        known += [(v["snippet"]["channelId"], norm_title(v["snippet"]["title"])) for v in
+                  api("https://www.googleapis.com/youtube/v3/videos?part=snippet&id=" + ",".join(ids[k:k + 50]))["items"]]
+    alike = lambda v: any(ch == v["snippet"]["channelId"] and difflib.SequenceMatcher(None, t, norm_title(v["snippet"]["title"])).ratio() >= SIMILAR
+                          for ch, t in known)
     after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365 * 5)).strftime("%Y-%m-%dT%H:%M:%SZ")
     for q, lang in SEARCHES:
         ids = [h["id"]["videoId"] for h in api("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
@@ -62,8 +75,9 @@ def cmd_suggest():
         vids = api("https://www.googleapis.com/youtube/v3/videos?part=snippet,status,statistics,contentDetails&id=" + ",".join(ids))["items"]
         print(f"== {q}")
         for v in sorted(vids, key=lambda v: -int(v["statistics"].get("viewCount", 0))):
-            if v["status"]["license"] != "creativeCommon":
+            if v["status"]["license"] != "creativeCommon" or alike(v):
                 continue
+            seen.add(v["id"])  # print each video once even when several search terms find it
             dur = v["contentDetails"]["duration"].replace("PT", "").lower()
             print(f"{v['id']}\t{int(v['statistics'].get('viewCount', 0)):>9}\t{dur}\t{v['snippet']['channelTitle']}\t{v['snippet']['title']}")
 
