@@ -23,7 +23,7 @@ def access_token(drive=False):
 def upload(path, title, desc, privacy, publish_at=None):
     tok = access_token()
     tags = [w.lstrip("#") for w in desc.split() if w.startswith("#")]
-    meta = {"snippet": {"title": title[:100], "description": desc, "tags": tags, "categoryId": "26",
+    meta = {"snippet": {"title": title[:100], "description": desc, "tags": tags, "categoryId": "15",
                         "defaultLanguage": "ko", "defaultAudioLanguage": "ko"},
             "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
     if publish_at:  # YouTube flips a scheduled video from private to public at this moment
