@@ -2,6 +2,7 @@
 """source.py - long-form animal source videos for 돌뚜뿌꾸 Shorts, from the Drive folder 롱폼원본.
 
     python3 source.py suggest           # CC candidates to download, per category (read-only)
+    python3 source.py suggest --series  # only the character-series lists (no search quota)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
     python3 source.py clean             # move sources with 3 Shorts made (and their subtitles) to the Drive trash
     python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg, moves.txt
@@ -58,7 +59,7 @@ def iso_secs(d):
     h, mi, s = (int(x or 0) for x in m.groups())
     return h * 3600 + mi * 60 + s
 
-def series_candidates(ch, seen, n=10, kw=""):
+def series_candidates(ch, seen, n=12, kw=""):
     """Most-viewed unused CC uploads of 3-15 min from a series channel (no search quota: playlist + videos calls)."""
     ids, tok = [], ""
     while True:
@@ -79,7 +80,7 @@ SIMILAR = 0.7  # same channel and titles this alike = the same moment filmed twi
 def norm_title(t):
     return re.sub(r"[^0-9a-z가-힣ぁ-んァ-ン一-龥]", "", html.unescape(t).lower())
 
-def cmd_suggest():
+def cmd_suggest(series_only=False):
     """CC candidates per category (read-only): already used/downloaded ids and near-copies of them removed, best first by views."""
     seen = {src for _, src in recent()} | {find_id(f["name"]) for f in drive_ls(FOLDER, "video/")}
     seen.discard("")
@@ -97,7 +98,7 @@ def cmd_suggest():
             seen.add(v["id"])
             dur = v["contentDetails"]["duration"].replace("PT", "").lower()
             print(f"{v['id']}\t{int(v['statistics'].get('viewCount', 0)):>9}\t{dur}\t{v['snippet']['channelTitle']}\t{v['snippet']['title']}")
-    for q, lang in SEARCHES:
+    for q, lang in ([] if series_only else SEARCHES):
         ids = [h["id"]["videoId"] for h in api("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
             {"part": "snippet", "type": "video", "videoLicense": "creativeCommon", "q": q, "maxResults": 15,
              "order": "viewCount", "publishedAfter": after, "relevanceLanguage": lang, "videoDuration": "medium"}))["items"]]
@@ -248,7 +249,7 @@ def cmd_fetch(file_id, outdir):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "suggest":
-        cmd_suggest()
+        cmd_suggest("--series" in sys.argv)
     elif len(sys.argv) >= 2 and sys.argv[1] == "list":
         cmd_list()
     elif len(sys.argv) >= 2 and sys.argv[1] == "clean":
