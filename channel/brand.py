@@ -83,7 +83,7 @@ def intro():
             t = i / FPS
             look = -1 + 2 * min(max((t - 0.25) / 0.25, 0), 1)
             txt = min(max((t - 0.45) / 0.25, 0), 1)
-            shot(f"""<div style="width:1080px;height:1920px;background:{PINK};position:relative">
+            shot(f"""<div style="width:1080px;height:1920px;background:{MINT};position:relative">
               <div style="position:absolute;left:260px;top:600px;width:560px;height:532px;transform:scale({ease_back(t / 0.3):.3f});transform-origin:50% 60%">
                 {logo(look, ease_back((t - 0.35) / 0.2))}</div>
               <div style="position:absolute;width:100%;top:{1200 + 40 * (1 - txt):.1f}px;text-align:center;font-size:140px;letter-spacing:-5px;color:{DARK};opacity:{txt:.2f}">돌뚜뿌꾸</div>
