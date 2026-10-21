@@ -4,6 +4,7 @@
     python3 upload.py video.mp4 --title "..." [--desc "..."] [--privacy private|unlisted|public]
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
     python3 upload.py ... --playlist "수달 사쿠라"   # also add it to this playlist (created public if missing)
+    python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number)
     python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
 Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
@@ -92,6 +93,13 @@ def playlist_add(name, vid):
     post("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet",
          {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}})
 
+def episode_title(series, title):
+    """'<series> #<next> | <title>'; the next number is one past the highest '<series> #n' among the uploads.
+    Character intros ('<series> | 소개 | ...') carry no number and don't count."""
+    rest = title[len(series) + 2:].lstrip() if title.startswith(series + " |") else title
+    nums = [int(m.group(1)) for t, _ in recent() for m in [re.match(re.escape(series) + r" #(\d+)", t)] if m]
+    return f"{series} #{max(nums, default=0) + 1} | {rest}"
+
 def recent(pages=20):
     """(title, source YouTube id or "") of the channel's uploads, newest first (up to 1000); the id comes from the 원본 link in the description."""
     pl = api("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true")["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
@@ -115,6 +123,7 @@ if __name__ == "__main__":
     p.add_argument("--desc", default=""); p.add_argument("--privacy", default="private")
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
     p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
+    p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist)")
     a = p.parse_args()
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
@@ -122,8 +131,11 @@ if __name__ == "__main__":
         print("\n".join(f"{t}\t{src}" for t, src in recent())); sys.exit()
     if not (a.video and a.title): p.error("video and --title are required")
     if a.desc.count("#") < 3: p.error("--desc needs a content summary and at least 3 #hashtags")
+    if a.episode:
+        if not a.playlist: p.error("--episode needs --playlist")
+        a.title = episode_title(a.playlist, a.title)
     vid = upload(a.video, a.title, a.desc, a.privacy, a.publish_at)
-    print(f"https://youtube.com/shorts/{vid}")
+    print(f"https://youtube.com/shorts/{vid}\t{a.title}")
     if a.playlist:
         try:
             playlist_add(a.playlist, vid)
