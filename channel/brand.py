@@ -13,6 +13,7 @@ FONT = os.path.join(ROOT, "shorts", ".cache", "Pretendard-ExtraBold.otf")  # mak
 CHROME = glob.glob("/opt/pw-browsers/chromium_headless_shell-*/*/headless_shell")[0]
 PINK, DARK, WHITE = "#FF2E7E", "#16131C", "#FFFFFF"
 BROWN, FUR, CREAM = "#8A5A3B", "#5E3B26", "#F6E3C8"  # otter face
+MINT = "#CDEEEA"  # profile background: soft water tone, easier on the eyes than PINK
 FPS, DUR, SR = 30, 1.0, 44100
 
 def logo(look=1.0, badge=1.0):
@@ -47,7 +48,7 @@ def shot(html, w, h, out, transparent=False):
     os.unlink(f.name)
 
 def profile():
-    shot(f"""<div style="width:800px;height:800px;background:{PINK};display:flex;flex-direction:column;align-items:center;justify-content:center">
+    shot(f"""<div style="width:800px;height:800px;background:{MINT};display:flex;flex-direction:column;align-items:center;justify-content:center">
       <div style="width:400px;height:380px;margin-top:-10px">{logo(0.6)}</div>
       <div style="font-size:104px;color:{DARK};letter-spacing:-4px;margin-top:8px">돌뚜뿌꾸</div></div>""",
          800, 800, os.path.join(ROOT, "channel", "profile.png"))
