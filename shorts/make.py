@@ -10,6 +10,8 @@ script.json:
                with "comment" (one reaction line under the video) and "credit" (출처 line)",
      "voice": "optional Google TTS voice name (default VOICE); a character series sets its own",
      "rate": "optional speaking rate (default 1.0), e.g. 0.9 for a sleepy character",
+     "outro": "optional line shown over the last OUTRO seconds with a bouncing arrow down at the channel name
+               (bottom-left of the Shorts player), e.g. "사쿠라의 다른 이야기가 궁금하다면"; the video gets no longer",
      "dub": "optional true for animal sources: narration (the animal's inner voice) may sit on any scene,
              with the source's own sound kept quietly underneath",
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
@@ -40,6 +42,7 @@ GREEN = r"&H3CFF5A&"  # pick-style speech captions, like the variety-show subtit
 CUT = 2.5      # seconds per stock clip; fast cuts read as current
 CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
+OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OLD_ID = 100000  # ponytail: Pixabay ids below this are ~2015-2021 uploads; tune if picks look dated
 
 def get(url, data=None, headers={}):
@@ -131,7 +134,20 @@ def chunks(say):
 def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
-def ass(title, timeline, cap_y=1180, pick=None, end=0):
+def outro(text, end):
+    """Pink-boxed line + an arrow bobbing down toward the channel name, which the Shorts player shows bottom-left."""
+    a = max(end - OUTRO, 0)
+    arrow = r"{\p1}m 30 0 l 60 0 l 60 50 l 90 50 l 45 100 l 0 50 l 30 50{\p0}"
+    lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1530)\\fad(200,0)}}{text}"]
+    k, step = 0, 0.3
+    while a + k * step < end:  # bob: 0 -> 24 px down -> back, every 0.6 s
+        y = 1625 + (24 if k % 2 else 0)
+        lines.append(f"Dialogue: 2,{ts(a + k * step)},{ts(min(a + (k + 1) * step, end))},Arrow,,0,0,0,,"
+                     f"{{\\move(90,{y},90,{1649 - y + 1625})}}{arrow}")
+        k += 1
+    return lines
+
+def ass(title, timeline, cap_y=1180, pick=None, end=0, tail=""):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -147,6 +163,8 @@ Style: PCap,Pretendard ExtraBold,72,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,
 Style: PNote,Pretendard ExtraBold,66,&H00000000,&H00000000,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,8,60,60,1385,1
 Style: PCredit,Pretendard ExtraBold,44,&H00777777,&H00777777,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,150,1
 Style: PNoteV,Pretendard ExtraBold,58,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,14,0,8,60,60,540,1
+Style: Outro,Pretendard ExtraBold,58,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,18,0,7,0,0,0,1
+Style: Arrow,Pretendard ExtraBold,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,5,0,7,0,0,0,1
 Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,4,0,2,60,60,120,1
 
 [Events]
@@ -168,6 +186,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lines = [f"Dialogue: 1,{ts(0)},{ts(end)},Title,,0,0,0,,{t}"]
     pop = r"{\pos(540,%d)\fscx75\fscy75\t(0,90,\fscx105\fscy105)\t(90,160,\fscx100\fscy100)}" % cap_y
     lines += [f"Dialogue: 0,{ts(a)},{ts(b)},{'PCap' if pick else 'Cap'},,0,0,0,,{pop}{text}" for a, b, text in timeline]
+    if tail:
+        lines += outro(tail, end)
     return head + "\n".join(lines) + "\n"
 
 def make(script, out):
@@ -242,7 +262,7 @@ def make(script, out):
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
         sub = os.path.join(tmp, "s.ass")
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
-        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t))
+        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, script.get("outro", "")))
         # no background music: original voices and the narration only
         ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
            "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
