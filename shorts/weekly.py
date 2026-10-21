@@ -9,7 +9,7 @@ after the 0.7 s channel intro. Uploads public with chapters and the sources in t
 "주간 몰아보기" playlist, then trashes the used week's copies from 쇼츠보관.
 """
 import argparse, datetime, os, re, subprocess, sys, tempfile, urllib.error
-from upload import ARCHIVE, api, drive_get, drive_ls, drive_trash, playlist_add, upload
+from upload import ARCHIVE, api, drive_get, drive_ls, drive_trash, localizations, playlist_add, upload
 from make import font
 
 SERIES = ["수달 사쿠라", "바다코끼리 히마와리"]
@@ -114,7 +114,11 @@ if __name__ == "__main__":
         desc = description(chosen, starts)
         if a.dry:
             print(title, desc, sep="\n\n"); sys.exit()
-        vid = upload(out, title, desc, "public")
+        ja = f"今週のさくら＆ヒマワリまとめ | {kst.month}月{kst.day}日"
+        en = f"This Week with Sakura the Otter & Himawari the Walrus | {kst.strftime('%b')} {kst.day}"
+        loc = localizations(desc, (ja, f"今週いちばん見られたカワウソさくらとセイウチのヒマワリのショート{len(chosen)}本をまとめました🦦🦭"),
+                            (en, f"This week's {len(chosen)} most-watched Shorts of Sakura the otter and Himawari the walrus, back to back 🦦🦭"))
+        vid = upload(out, title, desc, "public", loc=loc)
     print(f"https://youtu.be/{vid}\t{title}")
     try:
         playlist_add(PLAYLIST, vid)

@@ -7,6 +7,8 @@
     python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number),
                                                              # and a 720p copy goes to Drive 쇼츠보관 for weekly.py
     python3 upload.py ... --playlist "수달 사쿠라" --first     # character intro: top of the playlist, no number
+    python3 upload.py ... --title-ja "..." --summary-ja "..." --title-en "..." --summary-en "..."
+                                     # what Japanese / English viewers see (with --episode the number is added to these too)
     python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
 Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
@@ -24,12 +26,26 @@ def access_token(drive=False):
     with urllib.request.urlopen("https://oauth2.googleapis.com/token", body) as r:
         return json.load(r)["access_token"]
 
-def upload(path, title, desc, privacy, publish_at=None):
+# series names viewers abroad know them by; Japanese fans search the original channels' spellings
+SERIES_NAMES = {"수달 사쿠라": {"ja": "カワウソさくら", "en": "Sakura the Otter"},
+                "바다코끼리 히마와리": {"ja": "セイウチのヒマワリ", "en": "Himawari the Walrus"}}
+
+def localizations(desc, ja=None, en=None):
+    """{'ja': {...}, 'en': {...}} from (title, one-line summary) pairs: the summary replaces the Korean body,
+    the sources block and hashtags (from the '📺' line on) are kept as they are."""
+    tail = desc[desc.index("📺"):] if "📺" in desc else desc
+    tail = tail.replace("📺 원본:", "📺 Original / 元動画:").replace(
+        "라이선스: 크리에이티브 커먼즈 저작자 표시(CC BY)", "License: Creative Commons Attribution (CC BY)")
+    return {lang: {"title": t[:100], "description": f"{line}\n\n{tail}"} for lang, (t, line) in (("ja", ja), ("en", en)) if t}
+
+def upload(path, title, desc, privacy, publish_at=None, loc=None):
     tok = access_token()
     tags = [w.lstrip("#") for w in desc.split() if w.startswith("#")]
     meta = {"snippet": {"title": title[:100], "description": desc, "tags": tags, "categoryId": "15",
                         "defaultLanguage": "ko", "defaultAudioLanguage": "ko"},
             "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
+    if loc:  # Japanese / English viewers see these instead of the Korean title and description
+        meta["localizations"] = loc
     if publish_at:  # YouTube flips a scheduled video from private to public at this moment
         when = datetime.datetime.fromisoformat(publish_at).astimezone(datetime.timezone.utc)
         if when > datetime.datetime.now(datetime.timezone.utc):
@@ -37,7 +53,7 @@ def upload(path, title, desc, privacy, publish_at=None):
         else:
             meta["status"]["privacyStatus"] = "public"  # slot already passed: publish now
     req = urllib.request.Request(
-        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status" + (",localizations" if loc else ""),
         data=json.dumps(meta).encode(), method="POST",
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json; charset=UTF-8",
                  "X-Upload-Content-Type": "video/*", "X-Upload-Content-Length": str(os.path.getsize(path))})
@@ -133,12 +149,15 @@ def playlist_add(name, vid, first=False):
     post("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet",
          {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}, **({"position": 0} if first else {})}})
 
-def episode_title(series, title):
-    """'<series> #<next> | <title>'; the next number is one past the highest '<series> #n' among the uploads.
-    Character intros ('<series> | 소개 | ...') carry no number and don't count."""
-    rest = title[len(series) + 2:].lstrip() if title.startswith(series + " |") else title
+def next_episode(series):
+    """One past the highest '<series> #n' among the uploads. Character intros ('<series> | 소개 | ...') don't count."""
     nums = [int(m.group(1)) for t, _ in recent() for m in [re.match(re.escape(series) + r" #(\d+)", t)] if m]
-    return f"{series} #{max(nums, default=0) + 1} | {rest}"
+    return max(nums, default=0) + 1
+
+def episode_title(series, title, n, name=None):
+    """'<name or series> #<n> | <title without a leading "<series> |">'."""
+    rest = title[len(series) + 2:].lstrip() if title.startswith(series + " |") else title
+    return f"{name or series} #{n} | {rest}"
 
 def recent(pages=20):
     """(title, source YouTube id or "") of the channel's uploads, newest first (up to 1000); the id comes from the 원본 link in the description."""
@@ -163,6 +182,8 @@ if __name__ == "__main__":
     p.add_argument("--desc", default=""); p.add_argument("--privacy", default="private")
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
     p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
+    p.add_argument("--title-ja", help="Japanese title (with --summary-ja: one-line Japanese description)")
+    p.add_argument("--summary-ja"); p.add_argument("--title-en", help="English title"); p.add_argument("--summary-en")
     p.add_argument("--first", action="store_true", help="put it at the top of --playlist (character intro)")
     p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist); "
                    "also keeps a small copy in Drive for the weekly compilation")
@@ -173,10 +194,15 @@ if __name__ == "__main__":
         print("\n".join(f"{t}\t{src}" for t, src in recent())); sys.exit()
     if not (a.video and a.title): p.error("video and --title are required")
     if a.desc.count("#") < 3: p.error("--desc needs a content summary and at least 3 #hashtags")
+    names = SERIES_NAMES.get(a.playlist, {})
     if a.episode:
         if not a.playlist: p.error("--episode needs --playlist")
-        a.title = episode_title(a.playlist, a.title)
-    vid = upload(a.video, a.title, a.desc, a.privacy, a.publish_at)
+        n = next_episode(a.playlist)
+        a.title = episode_title(a.playlist, a.title, n)
+        a.title_ja = a.title_ja and episode_title(a.playlist, a.title_ja, n, names.get("ja"))
+        a.title_en = a.title_en and episode_title(a.playlist, a.title_en, n, names.get("en"))
+    loc = localizations(a.desc, (a.title_ja, a.summary_ja or a.title_ja), (a.title_en, a.summary_en or a.title_en))
+    vid = upload(a.video, a.title, a.desc, a.privacy, a.publish_at, loc)
     print(f"https://youtube.com/shorts/{vid}\t{a.title}")
     if a.playlist:
         try:
