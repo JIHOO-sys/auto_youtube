@@ -48,6 +48,29 @@ SEARCHES = [(q, "ko") for q in ["웃긴 강아지", "웃긴 고양이", "강아�
                                 "토끼", "햄스터", "고슴도치", "수달", "카피바라", "아기 동물", "동물원"]] + \
            [(q, "ja") for q in ["犬 おもしろ", "猫 おもしろ", "子猫", "犬 日常", "猫 日常", "カワウソ"]]
 
+# character series: channel id -> series name. Their unused CC long videos are listed in every suggest run
+SERIES = {"UC4hQbfN_ZRy4lSngWxuhHxA": "수달 사쿠라 (ma ko)"}
+
+def iso_secs(d):
+    m = re.match(r"P(?:\d+D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", d)
+    h, mi, s = (int(x or 0) for x in m.groups())
+    return h * 3600 + mi * 60 + s
+
+def series_candidates(ch, seen, n=10):
+    """Most-viewed unused CC uploads of 3-15 min from a series channel (no search quota: playlist + videos calls)."""
+    ids, tok = [], ""
+    while True:
+        r = api(f"https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=50&playlistId=UU{ch[2:]}" + (f"&pageToken={tok}" if tok else ""))
+        ids += [i["contentDetails"]["videoId"] for i in r["items"]]
+        tok = r.get("nextPageToken")
+        if not tok:
+            break
+    vids = []
+    for k in range(0, len(ids), 50):
+        vids += api("https://www.googleapis.com/youtube/v3/videos?part=snippet,status,statistics,contentDetails&id=" + ",".join(ids[k:k + 50]))["items"]
+    vids = [v for v in vids if v["id"] not in seen and v["status"]["license"] == "creativeCommon" and 180 <= iso_secs(v["contentDetails"]["duration"]) <= 900]
+    return sorted(vids, key=lambda v: -int(v["statistics"].get("viewCount", 0)))[:n]
+
 SIMILAR = 0.7  # same channel and titles this alike = the same moment filmed twice (e.g. 아기 고양이 / 고양이들 반응)
 
 def norm_title(t):
@@ -65,6 +88,12 @@ def cmd_suggest():
     alike = lambda v: any(ch == v["snippet"]["channelId"] and difflib.SequenceMatcher(None, t, norm_title(v["snippet"]["title"])).ratio() >= SIMILAR
                           for ch, t in known)
     after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365 * 5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for ch, name in SERIES.items():
+        print(f"== 시리즈: {name}")
+        for v in series_candidates(ch, seen):
+            seen.add(v["id"])
+            dur = v["contentDetails"]["duration"].replace("PT", "").lower()
+            print(f"{v['id']}\t{int(v['statistics'].get('viewCount', 0)):>9}\t{dur}\t{v['snippet']['channelTitle']}\t{v['snippet']['title']}")
     for q, lang in SEARCHES:
         ids = [h["id"]["videoId"] for h in api("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
             {"part": "snippet", "type": "video", "videoLicense": "creativeCommon", "q": q, "maxResults": 15,
