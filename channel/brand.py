@@ -14,7 +14,7 @@ CHROME = glob.glob("/opt/pw-browsers/chromium_headless_shell-*/*/headless_shell"
 PINK, DARK, WHITE = "#FF2E7E", "#16131C", "#FFFFFF"
 BROWN, FUR, CREAM = "#8A5A3B", "#5E3B26", "#F6E3C8"  # otter face
 MINT = "#CDEEEA"  # profile background: soft water tone, easier on the eyes than PINK
-FPS, DUR, SR = 30, 1.0, 44100
+FPS, DUR, SR = 30, 0.7, 44100
 
 def logo(look=1.0, badge=1.0):
     """Otter face peeking at you; look -1..1 moves the pupils, badge scales the play button."""
@@ -76,11 +76,12 @@ def ease_back(x):
     return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2
 
 def intro():
-    """1s: screen pops in, eyes glance left then right, play badge pops with a "뿅", name rises."""
+    """DUR seconds: face pops in, eyes glance left then right, play badge pops with a "뿅", name rises.
+    The beats are laid out on a 0..1 timeline and squeezed into DUR."""
     out = os.path.join(ROOT, "shorts", "intro.mp4")
     with tempfile.TemporaryDirectory() as tmp:
         for i in range(int(FPS * DUR)):
-            t = i / FPS
+            t = i / FPS / DUR  # 0..1
             look = -1 + 2 * min(max((t - 0.25) / 0.25, 0), 1)
             txt = min(max((t - 0.45) / 0.25, 0), 1)
             shot(f"""<div style="width:1080px;height:1920px;background:{MINT};position:relative">
@@ -89,7 +90,7 @@ def intro():
               <div style="position:absolute;width:100%;top:{1200 + 40 * (1 - txt):.1f}px;text-align:center;font-size:140px;letter-spacing:-5px;color:{DARK};opacity:{txt:.2f}">돌뚜뿌꾸</div>
             </div>""", 1080, 1920, f"{tmp}/{i:03d}.png")
         tt = np.arange(int(SR * DUR)) / SR
-        a = np.zeros_like(tt); m = tt >= 0.35; s = tt[m] - 0.35
+        a = np.zeros_like(tt); m = tt >= 0.35 * DUR; s = tt[m] - 0.35 * DUR
         a[m] = np.sin(2 * np.pi * (500 * s + 2500 * s * s)) * np.exp(-s * 18) * 0.5  # rising "뿅"
         with wave.open(f"{tmp}/a.wav", "wb") as w:
             w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
