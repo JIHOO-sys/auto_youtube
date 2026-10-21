@@ -3,13 +3,14 @@
 
     python3 upload.py video.mp4 --title "..." [--desc "..."] [--privacy private|unlisted|public]
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
+    python3 upload.py ... --playlist "수달 사쿠라"   # also add it to this playlist (created public if missing)
     python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
 Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
 (optional DRIVE_REFRESH_TOKEN: a different Google account for Drive, e.g. when the channel is a Brand Account).
 A vertical video under 3 minutes is treated as a Short by YouTube automatically.
 """
-import argparse, datetime, json, os, re, shutil, sys, urllib.parse, urllib.request
+import argparse, datetime, json, os, re, shutil, sys, urllib.error, urllib.parse, urllib.request
 
 def access_token(drive=False):
     # A Brand Account channel has no Drive of its own, so Drive may use a separate token (DRIVE_REFRESH_TOKEN)
@@ -75,6 +76,22 @@ def drive_trash(file_id):
     with urllib.request.urlopen(req) as r:
         return json.load(r)
 
+def post(url, body):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {access_token()}", "Content-Type": "application/json; charset=UTF-8"})
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)
+
+def playlist_add(name, vid):
+    """Add the video to the channel's playlist with this title, creating it (public) the first time."""
+    pls = api("https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50")["items"]
+    pid = next((p["id"] for p in pls if p["snippet"]["title"] == name), None)
+    if not pid:
+        pid = post("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status",
+                   {"snippet": {"title": name, "defaultLanguage": "ko"}, "status": {"privacyStatus": "public"}})["id"]
+    post("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet",
+         {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}})
+
 def recent(pages=20):
     """(title, source YouTube id or "") of the channel's uploads, newest first (up to 1000); the id comes from the 원본 link in the description."""
     pl = api("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true")["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
@@ -97,6 +114,7 @@ if __name__ == "__main__":
     p.add_argument("video", nargs="?"); p.add_argument("--title"); p.add_argument("--recent", action="store_true")
     p.add_argument("--desc", default=""); p.add_argument("--privacy", default="private")
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
+    p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
     a = p.parse_args()
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
@@ -106,3 +124,8 @@ if __name__ == "__main__":
     if a.desc.count("#") < 3: p.error("--desc needs a content summary and at least 3 #hashtags")
     vid = upload(a.video, a.title, a.desc, a.privacy, a.publish_at)
     print(f"https://youtube.com/shorts/{vid}")
+    if a.playlist:
+        try:
+            playlist_add(a.playlist, vid)
+        except urllib.error.HTTPError as e:  # the upload itself succeeded; don't fail the run over the playlist
+            print(f"warning: playlist {a.playlist!r} not updated ({e.code})", file=sys.stderr)
