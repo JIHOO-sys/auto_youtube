@@ -135,15 +135,16 @@ def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
 def outro(text, end):
-    """Pink-boxed line + an arrow bobbing down toward the channel name, which the Shorts player shows bottom-left."""
+    """Pink-boxed line + an arrow bobbing down onto the channel avatar, which the Shorts player shows bottom-left
+    (about y 1450-1540, x 50-140 of the 1080x1920 frame on a phone); both sit above it so the tip lands on the avatar."""
     a = max(end - OUTRO, 0)
-    arrow = r"{\p1}m 30 0 l 60 0 l 60 50 l 90 50 l 45 100 l 0 50 l 30 50{\p0}"
-    lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1530)\\fad(200,0)}}{text}"]
-    k, step = 0, 0.3
-    while a + k * step < end:  # bob: 0 -> 24 px down -> back, every 0.6 s
-        y = 1625 + (24 if k % 2 else 0)
+    arrow = r"{\p1}m 21 0 l 42 0 l 42 35 l 63 35 l 31 70 l 0 35 l 21 35{\p0}"
+    lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1275)\\fad(200,0)}}{text}"]
+    k, step, y0, bob = 0, 0.3, 1380, 20
+    while a + k * step < end:  # bob down and back every 0.6 s
+        y, y1 = (y0 + bob, y0) if k % 2 else (y0, y0 + bob)
         lines.append(f"Dialogue: 2,{ts(a + k * step)},{ts(min(a + (k + 1) * step, end))},Arrow,,0,0,0,,"
-                     f"{{\\move(90,{y},90,{1649 - y + 1625})}}{arrow}")
+                     f"{{\\move(64,{y},64,{y1})}}{arrow}")
         k += 1
     return lines
 
