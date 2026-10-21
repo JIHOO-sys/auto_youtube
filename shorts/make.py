@@ -43,6 +43,7 @@ CUT = 2.5      # seconds per stock clip; fast cuts read as current
 CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
+OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
 OLD_ID = 100000  # ponytail: Pixabay ids below this are ~2015-2021 uploads; tune if picks look dated
 
 def get(url, data=None, headers={}):
@@ -261,14 +262,17 @@ def make(script, out):
         lst = lambda name, parts: (open(os.path.join(tmp, name), "w").write("".join(f"file '{p}'\n" for p in parts)), os.path.join(tmp, name))[1]
         ff("-f", "concat", "-safe", "0", "-i", lst("v.txt", vparts), "-c", "copy", os.path.join(tmp, "v.mp4"))
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
-        sub = os.path.join(tmp, "s.ass")
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
-        open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, script.get("outro", "")))
-        # no background music: original voices and the narration only
-        ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
-           "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-           "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out)
+        # with an outro, also a copy without it (OUTRO_FREE): the weekly 16:9 compilation has no channel avatar to point at
+        outs = [(out, script.get("outro", ""))] + ([(OUTRO_FREE(out), "")] if script.get("outro") else [])
+        for k, (path, tail) in enumerate(outs):
+            sub = os.path.join(tmp, f"s{k}.ass")
+            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail))
+            # no background music: original voices and the narration only
+            ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
+               "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+               "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", path)
     return out
 
 if __name__ == "__main__":
