@@ -5,6 +5,7 @@
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
     python3 upload.py ... --playlist "수달 사쿠라"   # also add it to this playlist (created public if missing)
     python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number)
+    python3 upload.py ... --playlist "수달 사쿠라" --first     # character intro: top of the playlist, no number
     python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
 Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
@@ -83,15 +84,16 @@ def post(url, body):
     with urllib.request.urlopen(req) as r:
         return json.load(r)
 
-def playlist_add(name, vid):
-    """Add the video to the channel's playlist with this title, creating it (public) the first time."""
+def playlist_add(name, vid, first=False):
+    """Add the video to the channel's playlist with this title, creating it (public) the first time.
+    first=True puts it at the top (character intros)."""
     pls = api("https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50")["items"]
     pid = next((p["id"] for p in pls if p["snippet"]["title"] == name), None)
     if not pid:
         pid = post("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status",
                    {"snippet": {"title": name, "defaultLanguage": "ko"}, "status": {"privacyStatus": "public"}})["id"]
     post("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet",
-         {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}})
+         {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}, **({"position": 0} if first else {})}})
 
 def episode_title(series, title):
     """'<series> #<next> | <title>'; the next number is one past the highest '<series> #n' among the uploads.
@@ -123,6 +125,7 @@ if __name__ == "__main__":
     p.add_argument("--desc", default=""); p.add_argument("--privacy", default="private")
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
     p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
+    p.add_argument("--first", action="store_true", help="put it at the top of --playlist (character intro)")
     p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist)")
     a = p.parse_args()
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
@@ -138,6 +141,6 @@ if __name__ == "__main__":
     print(f"https://youtube.com/shorts/{vid}\t{a.title}")
     if a.playlist:
         try:
-            playlist_add(a.playlist, vid)
+            playlist_add(a.playlist, vid, a.first)
         except urllib.error.HTTPError as e:  # the upload itself succeeded; don't fail the run over the playlist
             print(f"warning: playlist {a.playlist!r} not updated ({e.code})", file=sys.stderr)
