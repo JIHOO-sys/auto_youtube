@@ -4,7 +4,8 @@
     python3 upload.py video.mp4 --title "..." [--desc "..."] [--privacy private|unlisted|public]
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
     python3 upload.py ... --playlist "수달 사쿠라"   # also add it to this playlist (created public if missing)
-    python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number)
+    python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number),
+                                                             # and a 720p copy goes to Drive 쇼츠보관 for weekly.py
     python3 upload.py ... --playlist "수달 사쿠라" --first     # character intro: top of the playlist, no number
     python3 upload.py --recent          # uploads: title <TAB> source YouTube id, to avoid repeats
 
@@ -12,7 +13,7 @@ Reads YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN from the environment
 (optional DRIVE_REFRESH_TOKEN: a different Google account for Drive, e.g. when the channel is a Brand Account).
 A vertical video under 3 minutes is treated as a Short by YouTube automatically.
 """
-import argparse, datetime, json, os, re, shutil, sys, urllib.error, urllib.parse, urllib.request
+import argparse, datetime, json, os, re, shutil, subprocess, sys, urllib.error, urllib.parse, urllib.request
 
 def access_token(drive=False):
     # A Brand Account channel has no Drive of its own, so Drive may use a separate token (DRIVE_REFRESH_TOKEN)
@@ -70,6 +71,41 @@ def drive_get(file_id, path):
         shutil.copyfileobj(r, f)  # source videos can be GBs; stream, don't buffer
     return path
 
+ARCHIVE = "쇼츠보관"  # small copies of series episodes, for the weekly long-form compilation (weekly.py)
+
+def drive_folder(name):
+    """Id of the channel account's Drive folder with this name, created if missing."""
+    q = urllib.parse.urlencode({"q": f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false", "fields": "files(id)"})
+    found = api(f"https://www.googleapis.com/drive/v3/files?{q}")["files"]
+    if found:
+        return found[0]["id"]
+    req = urllib.request.Request("https://www.googleapis.com/drive/v3/files", method="POST",
+                                 data=json.dumps({"name": name, "mimeType": "application/vnd.google-apps.folder"}).encode(),
+                                 headers={"Authorization": f"Bearer {access_token(drive=True)}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)["id"]
+
+def drive_put(path, name, folder):
+    """Upload a small file (read whole) into the Drive folder with this name."""
+    b = "dolttu" + os.urandom(8).hex()
+    meta = json.dumps({"name": name, "parents": [drive_folder(folder)]}).encode()
+    body = (f"--{b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + meta +
+            f"\r\n--{b}\r\nContent-Type: video/mp4\r\n\r\n".encode() + open(path, "rb").read() + f"\r\n--{b}--".encode())
+    req = urllib.request.Request("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", data=body, method="POST",
+                                 headers={"Authorization": f"Bearer {access_token(drive=True)}", "Content-Type": f"multipart/related; boundary={b}"})
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)["id"]
+
+def archive(path, vid):
+    """Keep a 720p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~5MB; weekly.py trashes it after use)."""
+    small = path + ".archive.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-vf", "scale=720:-2", "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "26", "-c:a", "aac", "-b:a", "128k", small], check=True)
+    try:
+        drive_put(small, f"{vid}.mp4", ARCHIVE)
+    finally:
+        os.remove(small)
+
 def drive_trash(file_id):
     """Move a Drive file to the trash (restorable for 30 days). Needs the full drive scope, not drive.readonly."""
     req = urllib.request.Request(f"https://www.googleapis.com/drive/v3/files/{file_id}", method="PATCH",
@@ -126,7 +162,8 @@ if __name__ == "__main__":
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
     p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
     p.add_argument("--first", action="store_true", help="put it at the top of --playlist (character intro)")
-    p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist)")
+    p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist); "
+                   "also keeps a small copy in Drive for the weekly compilation")
     a = p.parse_args()
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
@@ -144,3 +181,8 @@ if __name__ == "__main__":
             playlist_add(a.playlist, vid, a.first)
         except urllib.error.HTTPError as e:  # the upload itself succeeded; don't fail the run over the playlist
             print(f"warning: playlist {a.playlist!r} not updated ({e.code})", file=sys.stderr)
+    if a.episode:
+        try:
+            archive(a.video, vid)
+        except (urllib.error.HTTPError, subprocess.CalledProcessError) as e:  # only the weekly compilation misses it
+            print(f"warning: not archived for the weekly compilation ({e})", file=sys.stderr)
