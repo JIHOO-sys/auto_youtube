@@ -21,7 +21,7 @@ Reads PIXABAY_API_KEY and GOOGLE_TTS_KEY from the environment. Needs ffmpeg/ffpr
 """
 import argparse, base64, json, random, os, subprocess, sys, tempfile, urllib.parse, urllib.request
 
-VOICE = "ko-KR-Chirp3-HD-Kore"
+VOICE = "ko-KR-Chirp3-HD-Leda"  # the channel's fixed character voice (light, young)
 BRAND = "돌뚜뿌꾸"  # channel name shown in the pick-style header
 FONT_URL = "https://raw.githubusercontent.com/orioncactus/pretendard/main/packages/pretendard/dist/public/static/Pretendard-ExtraBold.otf"
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
@@ -56,7 +56,7 @@ def font():
 
 def tts(text, out, voice=VOICE):
     body = {"input": {"text": text.replace("*", "")}, "voice": {"languageCode": "ko-KR", "name": voice},
-            "audioConfig": {"audioEncoding": "LINEAR16", "sampleRateHertz": 44100, "speakingRate": 1.2}}
+            "audioConfig": {"audioEncoding": "LINEAR16", "sampleRateHertz": 44100, "speakingRate": 1.0}}  # natural pace; 1.2 sounded rushed
     r = get(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={os.environ['GOOGLE_TTS_KEY']}",
             json.dumps(body).encode(), {"Content-Type": "application/json"})
     open(out, "wb").write(base64.b64decode(json.loads(r)["audioContent"]))
