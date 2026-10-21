@@ -97,9 +97,11 @@ def drive_put(path, name, folder):
         return json.load(r)["id"]
 
 def archive(path, vid):
-    """Keep a 720p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~5MB; weekly.py trashes it after use)."""
+    """Keep a 720p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~5MB; weekly.py trashes it after use),
+    made from the outro-free render when make.py left one next to it."""
     small = path + ".archive.mp4"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-vf", "scale=720:-2", "-c:v", "libx264", "-preset", "veryfast",
+    clean = os.path.splitext(path)[0] + ".no-outro.mp4"  # make.py's copy without the outro arrow, when there is one
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", clean if os.path.exists(clean) else path, "-vf", "scale=720:-2", "-c:v", "libx264", "-preset", "veryfast",
                     "-crf", "26", "-c:a", "aac", "-b:a", "128k", small], check=True)
     try:
         drive_put(small, f"{vid}.mp4", ARCHIVE)
