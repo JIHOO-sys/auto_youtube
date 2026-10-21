@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""brand.py - render 돌뚜뿌꾸 branding: channel/profile.png, channel/banner.png, shorts/intro.mp4.
+"""brand.py - render 돌뚜뿌꾸 branding: channel/profile.png, channel/banner.png, channel/watermark.png, shorts/intro.mp4.
 
     python3 channel/brand.py
 
@@ -37,11 +37,12 @@ def logo(look=1.0, badge=1.0):
   </g>
 </svg>"""
 
-def shot(html, w, h, out):
+def shot(html, w, h, out, transparent=False):
     with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
         f.write(f"<html><head><meta charset=utf-8><style>@font-face{{font-family:P;src:url(file://{FONT})}}"
                 f"body{{margin:0;width:{w}px;height:{h}px;overflow:hidden;font-family:P}}</style></head><body>{html}</body></html>")
     subprocess.run([CHROME, "--no-sandbox", "--hide-scrollbars", f"--window-size={w},{h}", f"--screenshot={out}",
+                    *(["--default-background-color=00000000"] if transparent else []),
                     f"file://{f.name}"], check=True, capture_output=True)
     os.unlink(f.name)
 
@@ -50,6 +51,12 @@ def profile():
       <div style="width:400px;height:380px;margin-top:-10px">{logo(0.6)}</div>
       <div style="font-size:104px;color:{DARK};letter-spacing:-4px;margin-top:8px">돌뚜뿌꾸</div></div>""",
          800, 800, os.path.join(ROOT, "channel", "profile.png"))
+
+def watermark():
+    """YouTube video watermark (bottom-right corner, desktop players): the otter face on a transparent square."""
+    shot(f"""<div style="width:300px;height:300px;display:flex;align-items:center;justify-content:center">
+      <div style="width:270px;height:257px">{logo(0)}</div></div>""",
+         300, 300, os.path.join(ROOT, "channel", "watermark.png"), transparent=True)
 
 def banner():
     # YouTube shows only the centre 1546x423 on phones; everything that matters lives there
@@ -91,5 +98,5 @@ def intro():
                         "-shortest", out], check=True)
 
 if __name__ == "__main__":
-    profile(); banner(); intro()
-    print("channel/profile.png channel/banner.png shorts/intro.mp4")
+    profile(); banner(); watermark(); intro()
+    print("channel/profile.png channel/banner.png channel/watermark.png shorts/intro.mp4")
