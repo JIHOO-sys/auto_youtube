@@ -8,7 +8,8 @@ script.json:
     {"title": "상단 고정 제목\\n*강조*는 노란색",
      "style": "optional "pick": 하루한픽 layout - white header/footer, no TTS, original-audio scenes only,
                with "comment" (one reaction line under the video) and "credit" (출처 line)",
-     "voice": "optional Google TTS voice name (default VOICE)",
+     "voice": "optional Google TTS voice name (default VOICE); a character series sets its own",
+     "rate": "optional speaking rate (default 1.0), e.g. 0.9 for a sleepy character",
      "dub": "optional true for animal sources: narration (the animal's inner voice) may sit on any scene,
              with the source's own sound kept quietly underneath",
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
@@ -54,9 +55,9 @@ def font():
         open(path, "wb").write(get(FONT_URL))
     return CACHE
 
-def tts(text, out, voice=VOICE):
+def tts(text, out, voice=VOICE, rate=1.0):
     body = {"input": {"text": text.replace("*", "")}, "voice": {"languageCode": "ko-KR", "name": voice},
-            "audioConfig": {"audioEncoding": "LINEAR16", "sampleRateHertz": 44100, "speakingRate": 1.0}}  # natural pace; 1.2 sounded rushed
+            "audioConfig": {"audioEncoding": "LINEAR16", "sampleRateHertz": 44100, "speakingRate": rate}}  # 1.0 natural; 1.2 sounded rushed
     r = get(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={os.environ['GOOGLE_TTS_KEY']}",
             json.dumps(body).encode(), {"Content-Type": "application/json"})
     open(out, "wb").write(base64.b64decode(json.loads(r)["audioContent"]))
@@ -197,7 +198,7 @@ def make(script, out):
                 else:
                     s = {**s, "say": s.get("caption", ""), "src": [a]}
             else:
-                tts(s["say"], wav, script.get("voice", VOICE))
+                tts(s["say"], wav, script.get("voice", VOICE), script.get("rate", 1.0))
                 if script.get("dub") and s.get("src"):
                     # animal dub: the barks/meows stay audible under the voice
                     d0, n = duration(wav), len(s["src"])
