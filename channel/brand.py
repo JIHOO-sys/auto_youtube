@@ -12,17 +12,26 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.path.join(ROOT, "shorts", ".cache", "Pretendard-ExtraBold.otf")  # make.py downloads it
 CHROME = glob.glob("/opt/pw-browsers/chromium_headless_shell-*/*/headless_shell")[0]
 PINK, DARK, WHITE = "#FF2E7E", "#16131C", "#FFFFFF"
+BROWN, FUR, CREAM = "#8A5A3B", "#5E3B26", "#F6E3C8"  # otter face
 FPS, DUR, SR = 30, 1.0, 44100
 
 def logo(look=1.0, badge=1.0):
-    """TV screen with two eyes watching for you; look -1..1 moves the pupils, badge scales the play button."""
-    px = 20 * look
+    """Otter face peeking at you; look -1..1 moves the pupils, badge scales the play button."""
+    px = 14 * look
     return f"""<svg viewBox="0 0 400 380" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
-  <path d="M150 40 L120 8 M250 40 L280 8" stroke="{DARK}" stroke-width="16" stroke-linecap="round"/>
-  <rect x="20" y="40" width="360" height="270" rx="56" fill="{DARK}"/>
-  <circle cx="140" cy="175" r="62" fill="{WHITE}"/><circle cx="260" cy="175" r="62" fill="{WHITE}"/>
-  <circle cx="{140 + px}" cy="182" r="28" fill="{DARK}"/><circle cx="{260 + px}" cy="182" r="28" fill="{DARK}"/>
-  <circle cx="{150 + px}" cy="170" r="9" fill="{WHITE}"/><circle cx="{270 + px}" cy="170" r="9" fill="{WHITE}"/>
+  <circle cx="86" cy="92" r="40" fill="{BROWN}"/><circle cx="314" cy="92" r="40" fill="{BROWN}"/>
+  <circle cx="86" cy="92" r="20" fill="{FUR}"/><circle cx="314" cy="92" r="20" fill="{FUR}"/>
+  <ellipse cx="200" cy="190" rx="178" ry="152" fill="{BROWN}"/>
+  <ellipse cx="200" cy="258" rx="118" ry="78" fill="{CREAM}"/>
+  <ellipse cx="148" cy="248" rx="58" ry="46" fill="{CREAM}"/><ellipse cx="252" cy="248" rx="58" ry="46" fill="{CREAM}"/>
+  <circle cx="{136 + px}" cy="168" r="30" fill="{DARK}"/><circle cx="{264 + px}" cy="168" r="30" fill="{DARK}"/>
+  <circle cx="{146 + px}" cy="156" r="10" fill="{WHITE}"/><circle cx="{274 + px}" cy="156" r="10" fill="{WHITE}"/>
+  <path d="M170 214 Q200 200 230 214 Q228 240 200 246 Q172 240 170 214 Z" fill="{DARK}"/>
+  <path d="M200 246 L200 268 M200 268 Q182 288 162 274 M200 268 Q218 288 238 274" stroke="{DARK}" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <circle cx="132" cy="258" r="5" fill="{BROWN}"/><circle cx="112" cy="244" r="5" fill="{BROWN}"/><circle cx="114" cy="272" r="5" fill="{BROWN}"/>
+  <circle cx="268" cy="258" r="5" fill="{BROWN}"/><circle cx="288" cy="244" r="5" fill="{BROWN}"/><circle cx="286" cy="272" r="5" fill="{BROWN}"/>
+  <path d="M96 246 L14 228 M96 264 L12 272 M304 246 L386 228 M304 264 L388 272" stroke="{DARK}" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+  <ellipse cx="96" cy="210" rx="22" ry="13" fill="{PINK}" opacity=".45"/><ellipse cx="304" cy="210" rx="22" ry="13" fill="{PINK}" opacity=".45"/>
   <g transform="translate(330 300) scale({badge})">
     <circle r="62" fill="{PINK}" stroke="{DARK}" stroke-width="12"/><path d="M-18 -28 L30 0 L-18 28 Z" fill="{WHITE}"/>
   </g>
@@ -30,7 +39,7 @@ def logo(look=1.0, badge=1.0):
 
 def shot(html, w, h, out):
     with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
-        f.write(f"<html><head><style>@font-face{{font-family:P;src:url(file://{FONT})}}"
+        f.write(f"<html><head><meta charset=utf-8><style>@font-face{{font-family:P;src:url(file://{FONT})}}"
                 f"body{{margin:0;width:{w}px;height:{h}px;overflow:hidden;font-family:P}}</style></head><body>{html}</body></html>")
     subprocess.run([CHROME, "--no-sandbox", "--hide-scrollbars", f"--window-size={w},{h}", f"--screenshot={out}",
                     f"file://{f.name}"], check=True, capture_output=True)
@@ -48,9 +57,9 @@ def banner():
       <div style="position:absolute;left:180px;top:120px;width:300px;height:300px;border-radius:50%;background:{PINK};opacity:.12"></div>
       <div style="position:absolute;right:160px;bottom:110px;width:420px;height:420px;border-radius:50%;background:{PINK};opacity:.10"></div>
       <div style="position:absolute;left:507px;top:508px;width:1546px;height:423px;display:flex;align-items:center;justify-content:center;gap:70px">
-        <div style="width:330px;height:314px;flex:none">{logo(0.6).replace(f'stroke="{DARK}" stroke-width="16"', 'stroke="#3A3346" stroke-width="16"').replace(f'rx="56" fill="{DARK}"', 'rx="56" fill="#3A3346"')}</div>
+        <div style="width:330px;height:314px;flex:none">{logo(0.6)}</div>
         <div><div style="font-size:108px;color:{WHITE};letter-spacing:-3px;line-height:1.1"><span style="color:{PINK}">돌뚜뿌꾸</span><br>귀여운 친구들</div>
-          <div style="margin-top:22px;font-size:42px;color:#B9B4C6">강아지 · 고양이 · 토끼 · 수달 · 카피바라<br>속마음 더빙 · 하루한픽 웃긴 순간</div>
+          <div style="margin-top:22px;font-size:42px;color:#B9B4C6">수달 사쿠라 · 바다코끼리 히마와리<br>속마음 더빙 · 하루한픽 웃긴 순간</div>
           <div style="display:inline-block;margin-top:28px;background:{PINK};color:{WHITE};font-size:40px;padding:12px 34px;border-radius:999px">매일 1분 동물</div></div>
       </div></div>""", 2560, 1440, os.path.join(ROOT, "channel", "banner.png"))
 
