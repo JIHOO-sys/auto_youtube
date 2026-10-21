@@ -137,11 +137,12 @@ def ts(t):
 
 def outro(text, end):
     """Pink-boxed line + an arrow bobbing down onto the channel avatar, which the Shorts player shows bottom-left
-    (about y 1450-1540, x 50-140 of the 1080x1920 frame on a phone); both sit above it so the tip lands on the avatar."""
+    to viewers at about y 1700-1790, x 50-140 of the 1080x1920 frame on a phone (the channel owner's own view sits
+    higher, with an extra analytics row - don't place by that); both sit above it so the tip lands on the avatar."""
     a = max(end - OUTRO, 0)
     arrow = r"{\p1}m 21 0 l 42 0 l 42 35 l 63 35 l 31 70 l 0 35 l 21 35{\p0}"
-    lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1275)\\fad(200,0)}}{text}"]
-    k, step, y0, bob = 0, 0.3, 1380, 20
+    lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1510)\\fad(200,0)}}{text}"]
+    k, step, y0, bob = 0, 0.3, 1610, 20
     while a + k * step < end:  # bob down and back every 0.6 s
         y, y1 = (y0 + bob, y0) if k % 2 else (y0, y0 + bob)
         lines.append(f"Dialogue: 2,{ts(a + k * step)},{ts(min(a + (k + 1) * step, end))},Arrow,,0,0,0,,"
