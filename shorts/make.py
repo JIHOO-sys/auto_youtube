@@ -8,7 +8,8 @@ script.json:
     {"title": "상단 고정 제목\\n*강조*는 노란색",
      "style": "optional "pick": 하루한픽 layout - white header/footer, no TTS, original-audio scenes only,
                with "comment" (one reaction line under the video) and "credit" (출처 line)",
-     "voice": "optional Google TTS voice name (default VOICE); a character series sets its own",
+     "voice": "optional Google TTS voice name (default VOICE), or "supertonic:F4" for the free local Supertonic model;
+               a character series sets its own. Supertonic lines may carry <laugh> <sigh> <breath> (never captioned)",
      "rate": "optional speaking rate (default 1.0), e.g. 0.9 for a sleepy character",
      "outro": "optional line shown over the last OUTRO seconds with a bouncing arrow down at the channel name
                (bottom-left of the Shorts player), e.g. "사쿠라의 다른 이야기가 궁금하다면"; the video gets no longer",
@@ -24,7 +25,7 @@ script.json:
 
 Reads PIXABAY_API_KEY and GOOGLE_TTS_KEY from the environment. Needs ffmpeg/ffprobe (with libass).
 """
-import argparse, base64, json, random, os, subprocess, sys, tempfile, urllib.parse, urllib.request
+import argparse, base64, json, random, os, re, subprocess, sys, tempfile, urllib.parse, urllib.request
 
 VOICE = "ko-KR-Chirp3-HD-Leda"  # the channel's fixed character voice (light, young)
 BRAND = "돌뚜뿌꾸"  # channel name shown in the pick-style header
@@ -100,8 +101,24 @@ def font():
         open(path, "wb").write(get(FONT_URL))
     return CACHE
 
+TAGS = re.compile(r"<(laugh|breath|sigh)>\s*")  # Supertonic expression tags; read aloud by nothing else, never captioned
+_supertonic = None
+
 def tts(text, out, voice=VOICE, rate=1.0):
-    body = {"input": {"text": text.replace("*", "")}, "voice": {"languageCode": "ko-KR", "name": voice},
+    """Google Cloud TTS voice name, or "supertonic:<F1..F5|M1..M5>" for Supertone's free local model (pip install supertonic)."""
+    text = text.replace("*", "")
+    if voice.startswith("supertonic:"):
+        global _supertonic
+        from supertonic import TTS  # local ONNX model, downloaded from Hugging Face on first use
+        _supertonic = _supertonic or TTS(auto_download=True)
+        wav, _ = _supertonic.synthesize(text, voice_style=_supertonic.get_voice_style(voice_name=voice.split(":", 1)[1]),
+                                        lang="ko", total_steps=16, speed=rate)
+        raw = out + ".st.wav"
+        _supertonic.save_audio(wav, raw)
+        ff("-i", raw, "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", out)
+        os.remove(raw)
+        return
+    body = {"input": {"text": TAGS.sub("", text)}, "voice": {"languageCode": "ko-KR", "name": voice},
             "audioConfig": {"audioEncoding": "LINEAR16", "sampleRateHertz": 44100, "speakingRate": rate}}  # 1.0 natural; 1.2 sounded rushed
     r = get(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={os.environ['GOOGLE_TTS_KEY']}",
             json.dumps(body).encode(), {"Content-Type": "application/json"})
@@ -294,7 +311,7 @@ def make(script, out):
                 px, py = screen(x, y)
                 marks += fx_lines(t + min(off, max(d - 0.3, 0)), kind, min(max(px, 70), 1010), min(max(py, 80), 1840))
             # captions: spread over the scene by character count
-            cs = chunks(s["say"]) if s["say"] else []; total = sum(n for n, _ in cs) or 1; c = t
+            cs = chunks(TAGS.sub("", s["say"])) if s["say"] else []; total = sum(n for n, _ in cs) or 1; c = t
             for n, text in cs:
                 timeline.append((c, c + d * n / total, text)); c += d * n / total
             if s.get("src"):
