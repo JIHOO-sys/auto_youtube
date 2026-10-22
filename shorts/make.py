@@ -17,6 +17,8 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     any scene may add "fx": [[seconds into the scene, kind, x, y], ...] - a small manga-style mark by the animal's face,
+                x, y = where in the SOURCE frame (0..1 from the left / top); kinds: FX below
      "scenes": [{"say": "나레이션 문장, *강조 단어*는 노란 자막", "query": "english pixabay search",
                  "clips": [123, 456]}]}   # optional Pixabay ids chosen from --sheet
 
@@ -44,6 +46,45 @@ CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
+
+def _xf(path, deg=0, k=1.5):
+    """Rotate an ASS drawing's coordinates (pairs after m/l/b) by deg around 0,0 and scale by k."""
+    import math
+    c, n, out, nums = math.cos(math.radians(deg)), math.sin(math.radians(deg)), [], []
+    for tok in path.split():
+        if tok.lstrip("-").replace(".", "").isdigit():
+            nums.append(float(tok))
+            if len(nums) == 2:
+                x, y = nums; out += [f"{(x * c - y * n) * k:.0f}", f"{(x * n + y * c) * k:.0f}"]; nums = []
+        else:
+            out.append(tok)
+    return " ".join(out)
+
+_VEIN = "m -34 -10 b -14 -10 -10 -14 -10 -34 l -20 -34 b -20 -24 -24 -20 -34 -20"  # one quarter of the anger mark, bent inward
+# kind -> (style overrides, drawing or text, animation); colours are ASS &HBBGGRR&
+FX = {
+    "sweat":    (r"\1c&HFFC864&\3c&HFFFFFF&\bord4", _xf("m 0 -40 b 18 -10 28 5 28 18 b 28 34 15 44 0 44 b -15 44 -28 34 -28 18 b -28 5 -18 -10 0 -40"), "slide"),
+    "anger":    (r"\1c&H3C3CFF&\3c&HFFFFFF&\bord3", " ".join(_xf(_VEIN, d) for d in (0, 90, 180, 270)), "pulse"),
+    "heart":    (r"\1c&H9E5CFF&\3c&HFFFFFF&\bord4", _xf("m 0 30 b -44 0 -32 -34 0 -14 b 32 -34 44 0 0 30"), "float"),
+    "sparkle":  (r"\1c&H40E6FF&\3c&HFFFFFF&\bord3", _xf("m 0 -34 l 9 -9 l 34 0 l 9 9 l 0 34 l -9 9 l -34 0 l -9 -9"), "twinkle"),
+    "gloom":    (r"\1c&HC87850&\3c&HFFFFFF&\bord2", _xf("m -30 0 l -22 0 l -22 56 l -30 56 m -4 -6 l 4 -6 l 4 50 l -4 50 m 22 0 l 30 0 l 30 56 l 22 56"), "slide"),
+    "surprise": (r"\1c&H00E0FF&\3c&H16131C&\bord8\fs160", "!", "pop"),
+    "question": (r"\1c&HFFFFFF&\3c&H16131C&\bord8\fs150", "?", "pop"),
+    "zzz":      (r"\1c&HFFFFFF&\3c&H8A5A3B&\bord7\fs96", "Z z z", "float"),
+    "dots":     (r"\1c&HFFFFFF&\3c&H16131C&\bord8\fs170", "…", "pop"),
+}
+FX_DUR = 1.4  # seconds a mark stays
+FX_TEXT = {"surprise", "question", "zzz", "dots"}  # drawn as letters in the channel font, the rest as vector shapes
+
+def fx_lines(t0, kind, x, y):
+    style, body, anim = FX[kind]
+    a, b = ts(t0), ts(t0 + FX_DUR)
+    move = {"slide": rf"\move({x},{y - 10},{x},{y + 30})", "float": rf"\move({x},{y},{x},{y - 60})"}.get(anim, rf"\pos({x},{y})")
+    grow = {"pulse": r"\t(0,150,\fscx120\fscy120)\t(150,300,\fscx95\fscy95)\t(300,450,\fscx115\fscy115)\t(450,600,\fscx100\fscy100)",
+            "twinkle": r"\t(0,200,\fscx130\fscy130\frz20)\t(200,400,\fscx90\fscy90\frz0)\t(400,600,\fscx120\fscy120)",
+            "pop": r"\fscx40\fscy40\t(0,120,\fscx115\fscy115)\t(120,220,\fscx100\fscy100)"}.get(anim, r"\fscx60\fscy60\t(0,150,\fscx100\fscy100)")
+    draw = body if kind in FX_TEXT else rf"{{\p1}}{body}"
+    return [rf"Dialogue: 3,{a},{b},Arrow,,0,0,0,,{{\an5{move}{style}{grow}\fad(80,250)}}{draw}"]
 OLD_ID = 100000  # ponytail: Pixabay ids below this are ~2015-2021 uploads; tune if picks look dated
 
 def get(url, data=None, headers={}):
@@ -150,7 +191,7 @@ def outro(text, end):
         k += 1
     return lines
 
-def ass(title, timeline, cap_y=1180, pick=None, end=0, tail=""):
+def ass(title, timeline, cap_y=1180, pick=None, end=0, tail="", extra=()):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -189,6 +230,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lines = [f"Dialogue: 1,{ts(0)},{ts(end)},Title,,0,0,0,,{t}"]
     pop = r"{\pos(540,%d)\fscx75\fscy75\t(0,90,\fscx105\fscy105)\t(90,160,\fscx100\fscy100)}" % cap_y
     lines += [f"Dialogue: 0,{ts(a)},{ts(b)},{'PCap' if pick else 'Cap'},,0,0,0,,{pop}{text}" for a, b, text in timeline]
+    lines += list(extra)
     if tail:
         lines += outro(tail, end)
     return head + "\n".join(lines) + "\n"
@@ -202,7 +244,20 @@ def make(script, out):
                                             "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2]
             pick = {**pick, "vertical": int(h) > int(w)}
         reset = "{\\c%s}" % GREEN if pick else "{\\c&HFFFFFF&}"
-        vparts, aparts, timeline = [], [], []
+        vparts, aparts, timeline, marks = [], [], [], []
+        if script.get("source"):
+            sw, sh = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                                       "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2])
+            def screen(x, y):
+                """Source-frame fraction -> output pixel, following FIT / FIT_PICK / FIT_PICK_V."""
+                if pick and not pick["vertical"]:  # cover 1080x810 at PICK_TOP
+                    k = max(1080 / sw, 810 / sh)
+                    return round(x * sw * k - (sw * k - 1080) / 2), round(PICK_TOP + y * sh * k - (sh * k - 810) / 2)
+                if pick:  # cover the whole screen
+                    k = max(1080 / sw, 1920 / sh)
+                    return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (sh * k - 1920) / 2)
+                h = 1080 * sh / sw  # full width, centred over the blurred copy
+                return round(x * 1080), round((1920 - h) / 2 + y * h)
         for i, s in enumerate(script["scenes"]):
             wav = os.path.join(tmp, f"{i}.wav")
             if s.get("orig"):
@@ -235,6 +290,9 @@ def make(script, out):
                     os.replace(mixed, wav)
             d = duration(wav)
             aparts.append(wav)
+            for off, kind, x, y in s.get("fx", []):
+                px, py = screen(x, y)
+                marks += fx_lines(t + min(off, max(d - 0.3, 0)), kind, min(max(px, 70), 1010), min(max(py, 80), 1840))
             # captions: spread over the scene by character count
             cs = chunks(s["say"]) if s["say"] else []; total = sum(n for n, _ in cs) or 1; c = t
             for n, text in cs:
@@ -268,7 +326,7 @@ def make(script, out):
         outs = [(out, script.get("outro", ""))] + ([(OUTRO_FREE(out), "")] if script.get("outro") else [])
         for k, (path, tail) in enumerate(outs):
             sub = os.path.join(tmp, f"s{k}.ass")
-            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail))
+            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail, marks))
             # no background music: original voices and the narration only
             ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
                "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
