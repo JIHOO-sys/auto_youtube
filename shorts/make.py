@@ -18,6 +18,8 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     any scene may add "cover": [[from, to (seconds into the scene), x, y, width as a share of the 1080 px frame], ...]
+                - a big pulsing pink heart hiding that spot (mating and the like)
      any scene may add "fx": [[seconds into the scene, kind, x, y], ...] - a small manga-style mark by the animal's face,
                 x, y = where in the SOURCE frame (0..1 from the left / top); kinds: FX below
      "scenes": [{"say": "나레이션 문장, *강조 단어*는 노란 자막", "query": "english pixabay search",
@@ -48,24 +50,27 @@ YELLOW = r"{\c&H00E0FF&}"
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
 
-def _xf(path, deg=0, k=1.5):
-    """Rotate an ASS drawing's coordinates (pairs after m/l/b) by deg around 0,0 and scale by k."""
+def _xf(path, deg=0, k=1.5, norm=True):
+    """Rotate an ASS drawing's coordinates (pairs after m/l/b) by deg around 0,0 and scale by k. norm shifts it to start
+    at 0,0: libass centres a drawing (\\an5) on its 0,0-based box, so negative coordinates would push it off the spot."""
     import math
-    c, n, out, nums = math.cos(math.radians(deg)), math.sin(math.radians(deg)), [], []
+    c, n, toks, nums = math.cos(math.radians(deg)), math.sin(math.radians(deg)), [], []
     for tok in path.split():
         if tok.lstrip("-").replace(".", "").isdigit():
             nums.append(float(tok))
             if len(nums) == 2:
-                x, y = nums; out += [f"{(x * c - y * n) * k:.0f}", f"{(x * n + y * c) * k:.0f}"]; nums = []
+                x, y = nums; toks.append(((x * c - y * n) * k, (x * n + y * c) * k)); nums = []
         else:
-            out.append(tok)
-    return " ".join(out)
+            toks.append(tok)
+    pts = [t for t in toks if isinstance(t, tuple)]
+    mx, my = (min(p[0] for p in pts), min(p[1] for p in pts)) if norm else (0, 0)
+    return " ".join(t if isinstance(t, str) else f"{t[0] - mx:.0f} {t[1] - my:.0f}" for t in toks)
 
 _VEIN = "m -34 -10 b -14 -10 -10 -14 -10 -34 l -20 -34 b -20 -24 -24 -20 -34 -20"  # one quarter of the anger mark, bent inward
 # kind -> (style overrides, drawing or text, animation); colours are ASS &HBBGGRR&
 FX = {
     "sweat":    (r"\1c&HFFC864&\3c&HFFFFFF&\bord4", _xf("m 0 -40 b 18 -10 28 5 28 18 b 28 34 15 44 0 44 b -15 44 -28 34 -28 18 b -28 5 -18 -10 0 -40"), "slide"),
-    "anger":    (r"\1c&H3C3CFF&\3c&HFFFFFF&\bord3", " ".join(_xf(_VEIN, d) for d in (0, 90, 180, 270)), "pulse"),
+    "anger":    (r"\1c&H3C3CFF&\3c&HFFFFFF&\bord3", _xf(" ".join(_xf(_VEIN, d, 1, norm=False) for d in (0, 90, 180, 270))), "pulse"),
     "heart":    (r"\1c&H9E5CFF&\3c&HFFFFFF&\bord4", _xf("m 0 30 b -44 0 -32 -34 0 -14 b 32 -34 44 0 0 30"), "float"),
     "sparkle":  (r"\1c&H40E6FF&\3c&HFFFFFF&\bord3", _xf("m 0 -34 l 9 -9 l 34 0 l 9 9 l 0 34 l -9 9 l -34 0 l -9 -9"), "twinkle"),
     "gloom":    (r"\1c&HC87850&\3c&HFFFFFF&\bord2", _xf("m -30 0 l -22 0 l -22 56 l -30 56 m -4 -6 l 4 -6 l 4 50 l -4 50 m 22 0 l 30 0 l 30 56 l 22 56"), "slide"),
@@ -76,6 +81,18 @@ FX = {
 }
 FX_DUR = 1.4  # seconds a mark stays
 FX_TEXT = {"surprise", "question", "zzz", "dots"}  # drawn as letters in the channel font, the rest as vector shapes
+
+_HEART = "m 0 30 b -44 0 -32 -34 0 -14 b 32 -34 44 0 0 30"  # 88 px wide at scale 1
+
+def cover_lines(t0, t1, x, y, w):
+    """A big pink heart hiding part of the picture (e.g. mating) from t0 to t1, w px wide, gently pulsing."""
+    k, out, t = w / 88, [], t0
+    while t < t1:  # 0.5 s beats: 100% -> 108% -> 100%
+        e = min(t + 0.5, t1)
+        out.append(rf"Dialogue: 4,{ts(t)},{ts(e)},Arrow,,0,0,0,,{{\an5\pos({x},{y})\1c&H9E5CFF&\3c&HFFFFFF&\bord{max(4, round(w / 40))}"
+                   rf"\t(0,250,\fscx108\fscy108)\t(250,500,\fscx100\fscy100)}}{{\p1}}{_xf(_HEART, 0, k)}")
+        t = e
+    return out
 
 def fx_lines(t0, kind, x, y):
     style, body, anim = FX[kind]
@@ -307,6 +324,9 @@ def make(script, out):
                     os.replace(mixed, wav)
             d = duration(wav)
             aparts.append(wav)
+            for a0, a1, x, y, size in s.get("cover", []):
+                px, py = screen(x, y)
+                marks += cover_lines(t + a0, t + min(a1, d), px, py, round(size * 1080))
             for off, kind, x, y in s.get("fx", []):
                 px, py = screen(x, y)
                 marks += fx_lines(t + min(off, max(d - 0.3, 0)), kind, min(max(px, 70), 1010), min(max(py, 80), 1840))
