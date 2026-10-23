@@ -18,6 +18,8 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     any source scene may set "cx": where the animal is across the SOURCE frame (0..1, default 0.5) - wide sources are
+                cropped around it to fill over half the screen
      any scene may add "cover": [[from, to (seconds into the scene), x, y, width as a share of the 1080 px frame], ...]
                 - a big pulsing pink heart hiding that spot (mating and the like)
      any scene may add "fx": [[seconds into the scene, kind, x, y], ...] - a small manga-style mark by the animal's face,
@@ -37,6 +39,17 @@ MAX_TTS_CHARS = 700  # per Short; keeps Google TTS far inside its free tier
 # 16:9 source -> 9:16: sharp picture across the middle, blurred zoomed copy behind it
 FIT = ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
        "eq=brightness=-0.12[bg];[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1")
+# wide source in a dub Short: crop around the animal (scene "cx") to 9:8 and show it 1080x960 - over half the screen,
+# so the animal reads at feed size - instead of the whole 16:9 frame as a thin 608 px band
+ZOOM_W, ZOOM_H, ZOOM_TOP = 1080, 960, 420  # top sits just under the 2-line title
+
+def fit(sw, sh, cx=0.5):
+    if sw / sh <= ZOOM_W / ZOOM_H:  # already narrow (phone footage): the old full-width fit
+        return FIT
+    return ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
+            f"eq=brightness=-0.12[bg];[b]crop=w=ih*{ZOOM_W}/{ZOOM_H}:h=ih:x='max(0,min(iw-ow,{cx}*iw-ow/2))':y=0,"
+            f"scale={ZOOM_W}:{ZOOM_H}[fg];[bg][fg]overlay=0:{ZOOM_TOP},fps=30,setsar=1")
+
 # "pick" style: picture in a 1080x810 band on white, header (brand + title) above, comment + credit below
 PICK_TOP = 520
 FIT_PICK = (f"[0:v]scale=1080:810:force_original_aspect_ratio=increase,crop=1080:810,setsar=1,"
@@ -282,14 +295,18 @@ def make(script, out):
         if script.get("source"):
             sw, sh = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                                        "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2])
-            def screen(x, y):
-                """Source-frame fraction -> output pixel, following FIT / FIT_PICK / FIT_PICK_V."""
+            def screen(x, y, cx=0.5):
+                """Source-frame fraction -> output pixel, following fit() / FIT_PICK / FIT_PICK_V."""
                 if pick and not pick["vertical"]:  # cover 1080x810 at PICK_TOP
                     k = max(1080 / sw, 810 / sh)
                     return round(x * sw * k - (sw * k - 1080) / 2), round(PICK_TOP + y * sh * k - (sh * k - 810) / 2)
                 if pick:  # cover the whole screen
                     k = max(1080 / sw, 1920 / sh)
                     return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (sh * k - 1920) / 2)
+                if sw / sh > ZOOM_W / ZOOM_H:  # the cropped 9:8 window around cx
+                    cw = sh * ZOOM_W / ZOOM_H
+                    x0 = min(max(cx * sw - cw / 2, 0), sw - cw)
+                    return round((x * sw - x0) / cw * ZOOM_W), round(ZOOM_TOP + y * ZOOM_H)
                 h = 1080 * sh / sw  # full width, centred over the blurred copy
                 return round(x * 1080), round((1920 - h) / 2 + y * h)
         for i, s in enumerate(script["scenes"]):
@@ -325,10 +342,10 @@ def make(script, out):
             d = duration(wav)
             aparts.append(wav)
             for a0, a1, x, y, size in s.get("cover", []):
-                px, py = screen(x, y)
+                px, py = screen(x, y, s.get("cx", 0.5))
                 marks += cover_lines(t + a0, t + min(a1, d), px, py, round(size * 1080))
             for off, kind, x, y in s.get("fx", []):
-                px, py = screen(x, y)
+                px, py = screen(x, y, s.get("cx", 0.5))
                 marks += fx_lines(t + min(off, max(d - 0.3, 0)), kind, min(max(px, 70), 1010), min(max(py, 80), 1840))
             # captions: spread over the scene by character count
             cs = chunks(TAGS.sub("", s["say"])) if s["say"] else []; total = sum(n for n, _ in cs) or 1; c = t
@@ -340,7 +357,7 @@ def make(script, out):
                 for j, st in enumerate(starts):
                     seg = os.path.join(tmp, f"{i}_{j}.mp4")
                     ff("-ss", f"{st:.2f}", "-i", script["source"], "-t", f"{d / len(starts):.3f}", "-an",
-                       "-filter_complex", (FIT_PICK_V if pick["vertical"] else FIT_PICK) if pick else FIT, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
+                       "-filter_complex", (FIT_PICK_V if pick["vertical"] else FIT_PICK) if pick else fit(sw, sh, s.get("cx", 0.5)), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
                     vparts.append(seg)
                 t += d
                 continue
