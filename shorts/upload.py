@@ -75,7 +75,7 @@ def api(url):
 def drive_ls(folder, mime=""):
     """Files (id, name, size) in the channel account's Drive folder with this name."""
     ls = lambda q: api("https://www.googleapis.com/drive/v3/files?" + urllib.parse.urlencode(
-        {"q": q + " and trashed=false", "pageSize": 1000, "fields": "files(id,name,size,mimeType)"}))["files"]
+        {"q": q + " and trashed=false", "pageSize": 1000, "fields": "files(id,name,size,mimeType,videoMediaMetadata(durationMillis))"}))["files"]
     found = ls(f"name='{folder}' and mimeType='application/vnd.google-apps.folder'")
     if not found:
         return []
