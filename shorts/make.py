@@ -62,7 +62,8 @@ GREEN = r"&H3CFF5A&"  # pick-style speech captions, like the variety-show subtit
 CUT = 2.5      # seconds per stock clip; fast cuts read as current
 CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
-READ_CPS, SILENT_MIN = 6, 1.8  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
+READ_CPS, SILENT_MIN = 6, 1.6  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
+CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
 
@@ -332,7 +333,8 @@ def make(script, out):
             elif s.get("silent") and s.get("src"):
                 # inner thought as caption only: the source's own sound at full volume, long enough to read
                 n = len(s["src"])
-                d0 = s.get("dur") or max(SILENT_MIN, len(TAGS.sub("", s["say"]).replace("*", "")) / READ_CPS + 0.6)
+                line = TAGS.sub("", s["say"])
+                d0 = s.get("dur") or max(SILENT_MIN, len(line.replace("*", "")) / READ_CPS + 0.6 - CAP_TRIM * len(chunks(line)))
                 beds = []
                 for st in s["src"]:
                     beds += ["-ss", f"{st:.2f}", "-t", f"{d0 / n:.3f}", "-i", script["source"]]
