@@ -30,7 +30,7 @@
   |---|---|---|---|---|---|
   | 수달 사쿠라 | ma ko (UC4hQbfN_ZRy4lSngWxuhHxA) | 이 채널 영상 전부 | `"voice": "ko-KR-Chirp3-HD-Leda", "rate": 1.0` | 먹을 것에 진심, 능청스럽고 시치미 떼는 아기 말투 | #수달사쿠라 #カワウソさくら |
   | 바다코끼리 히마와리 | 伊勢シーパラダイス 공식 (UCz8xxcZ3zrmv1HAL8iZ50JA) | 제목에 セイウチ 가 있는 영상 | `"voice": "supertonic:F4", "rate": 0.9` | 잠 많고 귀찮음 많은 거구 아가씨(암컷, 엄마가 된 바다코끼리), 느릿한 목소리로 툴툴대지만 속은 여린 말투 | #바다코끼리히마와리 #セイウチ #伊勢シーパラダイス |
-  | 고릴라 샤바니 | Something About Gorillas ゴリラっぱTV (UC6gUFyDYV-q-0llCY9bR1ow), 나고야 히가시야마 동물원 | 제목에 Shabani 가 있는 영상 (The Shabani's Group) | `"voice": "supertonic:M1", "rate": 0.95` | 말수 적고 무뚝뚝하지만 가족 바보인 아빠 실버백, 자기가 잘생긴 걸 안다 | #고릴라샤바니 #シャバーニ #東山動物園 #ゴリラ |
+  | 고릴라 샤바니 | Something About Gorillas ゴリラっぱTV (UC6gUFyDYV-q-0llCY9bR1ow), 나고야 히가시야마 동물원 | 제목에 Shabani 가 있는 영상 (The Shabani's Group) | `"voice": "supertonic:M2", "rate": 0.95` | 말수 적고 무뚝뚝하지만 가족 바보인 아빠 실버백, 자기가 잘생긴 걸 안다 | #고릴라샤바니 #シャバーニ #東山動物園 #ゴリラ |
 
 - **캐릭터 설정집 (모든 회차에서 일관되게. 원본에 없는 이 채널만의 캐릭터 세계 = 창작의 핵심)**
   · 사실(이름·성별·관계)은 원본 설명란·자막에 있는 것만. 성격·말버릇·속마음·착각은 여기 설정대로 창작한다
