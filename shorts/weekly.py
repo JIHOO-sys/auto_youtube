@@ -12,7 +12,7 @@ import argparse, datetime, os, re, subprocess, sys, tempfile, urllib.error
 from upload import ARCHIVE, api, drive_get, drive_ls, drive_trash, localizations, playlist_add, upload
 from make import font
 
-SERIES = ["수달 사쿠라", "바다코끼리 히마와리"]
+SERIES = ["수달 사쿠라", "바다코끼리 히마와리", "고릴라 샤바니"]
 PLAYLIST = "주간 몰아보기"
 INTRO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "intro.mp4")
 MINT = "0xCDEEEA"
@@ -92,9 +92,9 @@ def description(chosen, starts):
             if line not in src:
                 src.append(line)
     names = " & ".join(s.split()[-1] for s in SERIES)
-    return (f"이번 주 {names} 쇼츠 중 가장 많이 본 {len(chosen)}편을 한 번에 몰아봐요 🦦🦭\n\n" + "\n".join(chap) +
+    return (f"이번 주 {names} 쇼츠 중 가장 많이 본 {len(chosen)}편을 한 번에 몰아봐요 🦦🦭🦍\n\n" + "\n".join(chap) +
             "\n\n📺 원본 (크리에이티브 커먼즈 저작자 표시 CC BY)\n" + "\n".join(src) +
-            "\n\n#돌뚜뿌꾸 #수달사쿠라 #바다코끼리히마와리 #수달 #바다코끼리 #동물 #귀여운동물 #동물더빙 #몰아보기")
+            "\n\n#돌뚜뿌꾸 #수달사쿠라 #바다코끼리히마와리 #고릴라샤바니 #수달 #바다코끼리 #고릴라 #동물 #귀여운동물 #동물더빙 #몰아보기")
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -110,14 +110,14 @@ if __name__ == "__main__":
         out = "weekly.mp4" if a.dry else os.path.join(tmp, "weekly.mp4")
         starts = render(clips, out, tmp)
         kst = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
-        title = f"이번 주 사쿠라 & 히마와리 몰아보기 | {kst.month}월 {kst.day}일"
+        title = f"이번 주 사쿠라 & 히마와리 & 샤바니 몰아보기 | {kst.month}월 {kst.day}일"
         desc = description(chosen, starts)
         if a.dry:
             print(title, desc, sep="\n\n"); sys.exit()
-        ja = f"今週のさくら＆ヒマワリまとめ | {kst.month}月{kst.day}日"
-        en = f"This Week with Sakura the Otter & Himawari the Walrus | {kst.strftime('%b')} {kst.day}"
-        loc = localizations(desc, (ja, f"今週いちばん見られたカワウソさくらとセイウチのヒマワリのショート{len(chosen)}本をまとめました🦦🦭"),
-                            (en, f"This week's {len(chosen)} most-watched Shorts of Sakura the otter and Himawari the walrus, back to back 🦦🦭"))
+        ja = f"今週のさくら＆ヒマワリ＆シャバーニまとめ | {kst.month}月{kst.day}日"
+        en = f"This Week with Sakura, Himawari & Shabani | {kst.strftime('%b')} {kst.day}"
+        loc = localizations(desc, (ja, f"今週いちばん見られたカワウソさくら・セイウチのヒマワリ・ゴリラのシャバーニのショート{len(chosen)}本をまとめました🦦🦭🦍"),
+                            (en, f"This week's {len(chosen)} most-watched Shorts of Sakura the otter, Himawari the walrus and Shabani the gorilla, back to back 🦦🦭🦍"))
         vid = upload(out, title, desc, "public", loc=loc)
     print(f"https://youtu.be/{vid}\t{title}")
     try:

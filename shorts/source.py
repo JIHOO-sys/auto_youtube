@@ -52,7 +52,8 @@ SEARCHES = [(q, "ko") for q in ["웃긴 강아지", "웃긴 고양이", "강아�
 # character series: channel id -> series name. Their unused CC long videos are listed in every suggest run
 # (channel id, title keyword or "" for every upload) -> series name
 SERIES = {("UC4hQbfN_ZRy4lSngWxuhHxA", ""): "수달 사쿠라 (ma ko)",
-          ("UCz8xxcZ3zrmv1HAL8iZ50JA", "セイウチ"): "바다코끼리 히마와리 (伊勢シーパラダイス)"}
+          ("UCz8xxcZ3zrmv1HAL8iZ50JA", "セイウチ"): "바다코끼리 히마와리 (伊勢シーパラダイス)",
+          ("UC6gUFyDYV-q-0llCY9bR1ow", "Shabani"): "고릴라 샤바니 (ゴリラっぱTV, 東山動物園)"}
 
 def iso_secs(d):
     m = re.match(r"P(?:\d+D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", d)

@@ -28,7 +28,8 @@ def access_token(drive=False):
 
 # series names viewers abroad know them by; Japanese fans search the original channels' spellings
 SERIES_NAMES = {"수달 사쿠라": {"ja": "カワウソさくら", "en": "Sakura the Otter"},
-                "바다코끼리 히마와리": {"ja": "セイウチのヒマワリ", "en": "Himawari the Walrus"}}
+                "바다코끼리 히마와리": {"ja": "セイウチのヒマワリ", "en": "Himawari the Walrus"},
+                "고릴라 샤바니": {"ja": "ゴリラのシャバーニ", "en": "Shabani the Gorilla"}}
 
 def localizations(desc, ja=None, en=None):
     """{'ja': {...}, 'en': {...}} from (title, one-line summary) pairs: the summary replaces the Korean body,
