@@ -4,7 +4,7 @@
     python3 source.py suggest           # CC candidates to download, per category (read-only)
     python3 source.py suggest --series  # only the character-series lists (no search quota)
     python3 source.py list              # videos in 롱폼원본: drive id, YouTube id, shorts already made from it
-    python3 source.py clean             # move sources with 3 Shorts made (and their subtitles) to the Drive trash
+    python3 source.py clean             # move sources that gave all their Shorts (3, up to 6 for long ones) + subtitles to the Drive trash
     python3 source.py fetch DRIVE_ID DIR # DIR/video.*, meta.json (YouTube title/channel/license), transcript.txt, frames.jpg, moves.txt
     python3 source.py moves VIDEO        # motion/loudness per 2 s + liveliest windows (animal sources have little dialogue)
 
@@ -18,7 +18,13 @@ from upload import api, drive_get, drive_ls, drive_trash, recent
 
 FOLDER = "롱폼원본"
 YTID = re.compile(r"\[([A-Za-z0-9_-]{11})\]")
-SHORTS_PER_SOURCE = 3  # different moments of one long video before moving on
+SHORTS_PER_SOURCE = 3  # different moments of one long video before moving on...
+SECS_PER_SHORT, MAX_PER_SOURCE = 150, 6  # ...more for long ones: one per 2.5 min of source, up to 6
+
+def limit(f):
+    """How many Shorts this Drive video may give: 3, or one per 2.5 minutes of a longer video (at most 6)."""
+    ms = int(f.get("videoMediaMetadata", {}).get("durationMillis", 0))
+    return min(MAX_PER_SOURCE, max(SHORTS_PER_SOURCE, ms // 1000 // SECS_PER_SHORT))
 
 def youtube_meta(vid):
     items = api(f"https://www.googleapis.com/youtube/v3/videos?part=snippet,status,contentDetails&id={vid}")["items"]
@@ -122,18 +128,19 @@ def cmd_list():
     for f in drive_ls(FOLDER, "video/"):
         vid = find_id(f["name"])
         n = used.get(vid, 0)
-        status = "youtube id not found - skip" if not vid else ("done" if n >= SHORTS_PER_SOURCE else f"{n}/{SHORTS_PER_SOURCE} made")
+        k = limit(f)
+        status = "youtube id not found - skip" if not vid else ("done" if n >= k else f"{n}/{k} made")
         print(f"{f['id']}\t{vid}\t{status}\t{f['name']}")
 
 def cmd_clean():
-    """Trash 롱폼원본 videos that already have SHORTS_PER_SOURCE Shorts, plus their same-name subtitle files."""
+    """Trash 롱폼원본 videos that already gave all their Shorts (limit()), plus their same-name subtitle files."""
     used = {}
     for _, src in recent():
         used[src] = used.get(src, 0) + 1
     files = drive_ls(FOLDER)
     for f in [x for x in files if x["mimeType"].startswith("video/")]:
         vid = find_id(f["name"])
-        if not vid or used.get(vid, 0) < SHORTS_PER_SOURCE:
+        if not vid or used.get(vid, 0) < limit(f):
             continue
         base = os.path.splitext(f["name"])[0]
         subs = [x for x in files if x is not f and x["name"].startswith(base) and x["name"].endswith((".srt", ".vtt"))]
