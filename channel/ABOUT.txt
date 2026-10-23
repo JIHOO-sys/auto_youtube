@@ -1,11 +1,12 @@
-채널 설명 (2026-10-22 정리, 수익 창출 심사 대비: 원본에 무엇을 더하는지 분명히)
+채널 설명 (2026-10-23 고릴라 샤바니 추가, 수익 창출 심사 대비: 원본에 무엇을 더하는지 분명히)
 한국어·일본어·영어 모두 API(channels.update)로 채널에 반영됨. 조회 API는 ko_KR 만 돌려주지만 스튜디오에서는 세 언어가 다 보임 (2026-10-22 확인).
 바꿀 땐 이 파일을 고친 뒤 같은 방식으로 다시 반영하거나, 스튜디오 → 맞춤설정 → 프로필에서 언어별로 수정.
 
-키워드: 수달사쿠라 "수달 사쿠라" "바다코끼리 히마와리" 동물더빙 동물속마음 수달 바다코끼리 귀여운동물 웃긴동물 동물쇼츠 カワウソさくら カワウソ セイウチ ヒマワリ 伊勢シーパラダイス 吹き替え "Sakura the Otter" "Himawari the Walrus" otter walrus "cute animals" "funny animals" "animal dubbing"
+키워드: 수달사쿠라 "수달 사쿠라" "바다코끼리 히마와리" "고릴라 샤바니" 동물더빙 동물속마음 수달 바다코끼리 고릴라 귀여운동물 웃긴동물 동물쇼츠 カワウソさくら カワウソ セイウチ ヒマワリ シャバーニ ゴリラ 伊勢シーパラダイス 東山動物園 吹き替え "Sakura the Otter" "Himawari the Walrus" "Shabani the Gorilla" otter walrus gorilla "cute animals" "funny animals" "animal dubbing"
+채널 설명은 언어마다 1,000자 이하 (영어판이 가장 김: 982자)
 
 ===== 한국어 (기본) =====
-일본의 귀여운 동물 친구들, 수달 사쿠라 🦦와 바다코끼리 히마와리 🦭의 속마음을 한국어로 더빙하는 채널이에요.
+일본의 귀여운 동물 친구들, 수달 사쿠라 🦦, 바다코끼리 히마와리 🦭, 고릴라 샤바니 🦍의 속마음을 한국어로 더빙하는 채널이에요.
 
 돌뚜뿌꾸가 원본 영상에 새로 더하는 것
 ✍️ 캐릭터마다 성격과 말버릇을 정해 직접 쓴 1인칭 속마음 대본
@@ -17,14 +18,15 @@
 
 🦦 수달 사쿠라 — 먹을 것에 진심인 능청쟁이. 고양이 모치 오빠와 함께 살아요
 🦭 바다코끼리 히마와리 — 아침잠 많고 귀찮음 많지만 속은 여린 거구 아가씨
+🦍 고릴라 샤바니 — 일본에서 '잘생긴 고릴라'로 유명한, 무뚝뚝하지만 가족 바보인 아빠
 
 원본은 크리에이티브 커먼즈 저작자 표시(CC BY)로 공개된 영상만 사용하고, 모든 영상 설명란에 원본 제목·링크·채널을 밝혀요.
-원본 채널: ma ko (カワウソさくら) · 伊勢シーパラダイス 公式チャンネル
+원본 채널: ma ko (カワウソさくら) · 伊勢シーパラダイス 公式チャンネル · Something About Gorillas ゴリラっぱTV
 
-#수달사쿠라 #바다코끼리히마와리 #동물더빙
+#수달사쿠라 #바다코끼리히마와리 #고릴라샤바니 #동물더빙
 
 ===== 日本語 =====
-日本のかわいい動物たち、カワウソのさくら🦦とセイウチのヒマワリ🦭の「心の声」を韓国語で吹き替えている韓国のチャンネルです。
+日本のかわいい動物たち、カワウソのさくら🦦・セイウチのヒマワリ🦭・ゴリラのシャバーニ🦍の「心の声」を韓国語で吹き替えている韓国のチャンネルです。
 
 돌뚜뿌꾸が元動画に加えているもの
 ✍️ キャラクターごとに性格と口ぐせを決めて書いた、一人称の「心の声」の台本
@@ -36,27 +38,29 @@
 
 🦦 カワウソさくら — 食べ物に本気な、とぼけ上手。猫のもちお兄ちゃんと暮らしています
 🦭 セイウチのヒマワリ — 朝が苦手で面倒くさがり、でも本当は優しい大きな女の子
+🦍 ゴリラのシャバーニ — 「イケメンゴリラ」で有名な、無口でクールだけど家族に甘いお父さん
 
 元動画はクリエイティブ・コモンズ 表示(CC BY)で公開されている動画のみを使用し、すべての動画の説明欄に元動画のタイトル・リンク・チャンネル名を記載しています。
-元チャンネル: ma ko (カワウソさくら) · 伊勢シーパラダイス 公式チャンネル
+元チャンネル: ma ko (カワウソさくら) · 伊勢シーパラダイス 公式チャンネル · Something About Gorillas ゴリラっぱTV
 
-#カワウソさくら #セイウチ #吹き替え
+#カワウソさくら #セイウチ #シャバーニ #吹き替え
 
 ===== English =====
-A Korean channel that dubs the inner thoughts of two adorable animals from Japan: Sakura the Otter 🦦 and Himawari the Walrus 🦭.
+Korean dubs of the inner thoughts of animals from Japan: Sakura the Otter 🦦, Himawari the Walrus 🦭 and Shabani the Gorilla 🦍.
 
 What 돌뚜뿌꾸 adds to the original footage
-✍️ Original first-person "inner voice" scripts, with a set personality and catchphrases for each character
+✍️ Original first-person "inner voice" scripts with a set personality for each character
 🎙️ Korean voice dubbing for each character
-🇯🇵→🇰🇷 Korean translation of the on-screen Japanese captions and dialogue
-🎬 Episodic series editing and comic emotion effects
+🇯🇵→🇰🇷 Korean translation of on-screen Japanese captions
+🎬 Episodic series editing and comic effects
 
-📺 Shorts daily at 7:30, 12:30 and 19:00 (KST) / Weekly recap every Monday evening
+📺 Daily Shorts (7:30, 12:30, 19:00 KST) + a Monday weekly recap
 
-🦦 Sakura the Otter — a food-obsessed little trickster who lives with her big cat brother Mochi
+🦦 Sakura the Otter — a food-obsessed little trickster living with cat brother Mochi
 🦭 Himawari the Walrus — sleepy and grumpy in the morning, but soft-hearted
+🦍 Shabani the Gorilla — Japan's famously handsome silverback, a softie for his family
 
-We only use videos published under Creative Commons Attribution (CC BY), and every video credits the original title, link and channel in its description.
-Original channels: ma ko (カワウソさくら) · 伊勢シーパラダイス (Ise Sea Paradise)
+We only use Creative Commons Attribution (CC BY) videos and credit the original in every description.
+Original channels: ma ko (カワウソさくら) · 伊勢シーパラダイス (Ise Sea Paradise) · Something About Gorillas ゴリラっぱTV
 
-#SakuraTheOtter #HimawariTheWalrus #AnimalDubbing
+#SakuraTheOtter #HimawariTheWalrus #ShabaniTheGorilla #AnimalDubbing
