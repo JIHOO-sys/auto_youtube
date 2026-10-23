@@ -18,6 +18,8 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     a "say" scene may set "silent": true - the line shows as the usual caption but is not voiced; the source's sound
+                plays at full volume for as long as the line takes to read (or "dur" seconds)
      any source scene may set "cx": where the animal is across the SOURCE frame (0..1, default 0.5) - wide sources are
                 cropped around it to fill over half the screen
      any scene may add "cover": [[from, to (seconds into the scene), x, y, width as a share of the 1080 px frame], ...]
@@ -60,6 +62,7 @@ GREEN = r"&H3CFF5A&"  # pick-style speech captions, like the variety-show subtit
 CUT = 2.5      # seconds per stock clip; fast cuts read as current
 CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
+READ_CPS, SILENT_MIN = 6, 1.8  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
 
@@ -326,6 +329,15 @@ def make(script, out):
                     s = {**s, "say": "", "src": [a]}
                 else:
                     s = {**s, "say": s.get("caption", ""), "src": [a]}
+            elif s.get("silent") and s.get("src"):
+                # inner thought as caption only: the source's own sound at full volume, long enough to read
+                n = len(s["src"])
+                d0 = s.get("dur") or max(SILENT_MIN, len(TAGS.sub("", s["say"]).replace("*", "")) / READ_CPS + 0.6)
+                beds = []
+                for st in s["src"]:
+                    beds += ["-ss", f"{st:.2f}", "-t", f"{d0 / n:.3f}", "-i", script["source"]]
+                ff(*beds, "-filter_complex", "".join(f"[{j}:a]" for j in range(n)) + f"concat=n={n}:v=0:a=1",
+                   "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", wav)
             else:
                 tts(s["say"], wav, script.get("voice", VOICE), script.get("rate", 1.0))
                 if script.get("dub") and s.get("src"):
