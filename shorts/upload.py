@@ -160,13 +160,13 @@ def episode_title(series, title, n, name=None):
     rest = title[len(series) + 2:].lstrip() if title.startswith(series + " |") else title
     return f"{name or series} #{n} | {rest}"
 
-def recent(pages=20):
+def recent(pages=20, status=False):
     """(title, source YouTube id or "") of the channel's uploads, newest first (up to 1000); the id comes from the 원본 link in the description."""
     pl = api("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true")["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
     items, tok = [], ""
     # every upload counts toward its source's 3-Short limit, so read past the first page (1 quota unit each)
     for _ in range(pages):
-        r = api(f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId={pl}" + (f"&pageToken={tok}" if tok else ""))
+        r = api(f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,status&maxResults=50&playlistId={pl}" + (f"&pageToken={tok}" if tok else ""))
         items += r["items"]
         tok = r.get("nextPageToken")
         if not tok:
@@ -174,7 +174,8 @@ def recent(pages=20):
     out = []
     for i in items:
         m = re.search(r"youtu\.be/([A-Za-z0-9_-]{11})", i["snippet"]["description"])
-        out.append((i["snippet"]["title"], m.group(1) if m else ""))
+        row = (i["snippet"]["title"], m.group(1) if m else "")
+        out.append(row + ((i["status"]["privacyStatus"],) if status else ()))
     return out
 
 if __name__ == "__main__":
@@ -192,7 +193,7 @@ if __name__ == "__main__":
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
     if a.recent:
-        print("\n".join(f"{t}\t{src}" for t, src in recent())); sys.exit()
+        print("\n".join(f"{t}\t{src}\t{st}" for t, src, st in recent(status=True))); sys.exit()  # st private = not yet published
     if not (a.video and a.title): p.error("video and --title are required")
     if a.desc.count("#") < 3: p.error("--desc needs a content summary and at least 3 #hashtags")
     names = SERIES_NAMES.get(a.playlist, {})
