@@ -18,6 +18,8 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     "next": "optional part-1 teaser, e.g. "다음 화: 샤바니, 딸에게 혼나다" - takes the outro's place for NEXT_DUR s",
+     "prev": "optional part-2 opener, e.g. "지난 화: 키요마사가 아빠한테 덤볐다" - first PREV_DUR s under the badge",
      "badge": "optional series badge shown top-left of the picture all along, e.g. "샤바니 #12"",
      a "say" scene may set "silent": true - the line shows as the usual caption but is not voiced; the source's sound
                 plays at full volume for as long as the line takes to read (or "dur" seconds)
@@ -65,6 +67,8 @@ CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
 READ_CPS, SILENT_MIN = 6, 1.6  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
 CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
+NEXT_DUR = 1.5  # a 2-part story's "다음 화: ..." teaser replaces the outro line, shorter so the loop isn't held up
+PREV_DUR = 1.5  # ...and part 2 opens with a "지난 화: ..." line for viewers who meet it first
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
 OUTRO_FREE = lambda out: os.path.splitext(out)[0] + ".no-outro.mp4"  # same Short without it; upload.py archives this one
 
@@ -228,11 +232,11 @@ def chunks(say):
 def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
-def outro(text, end):
+def outro(text, end, dur=OUTRO):
     """Pink-boxed line + an arrow bobbing down onto the channel avatar, which the Shorts player shows bottom-left
     to viewers at about y 1700-1790, x 50-140 of the 1080x1920 frame on a phone (the channel owner's own view sits
     higher, with an extra analytics row - don't place by that); both sit above it so the tip lands on the avatar."""
-    a = max(end - OUTRO, 0)
+    a = max(end - dur, 0)
     arrow = r"{\p1}m 21 0 l 42 0 l 42 35 l 63 35 l 31 70 l 0 35 l 21 35{\p0}"
     lines = [f"Dialogue: 2,{ts(a)},{ts(end)},Outro,,0,0,0,,{{\\pos(60,1510)\\fad(200,0)}}{text}"]
     k, step, y0, bob = 0, 0.3, 1610, 20
@@ -243,7 +247,7 @@ def outro(text, end):
         k += 1
     return lines
 
-def ass(title, timeline, cap_y=1180, pick=None, end=0, tail="", extra=()):
+def ass(title, timeline, cap_y=1180, pick=None, end=0, tail="", extra=(), tail_dur=OUTRO):
     head = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -260,6 +264,7 @@ Style: PNote,Pretendard ExtraBold,66,&H00000000,&H00000000,&H00FFFFFF,&H00000000
 Style: PCredit,Pretendard ExtraBold,44,&H00777777,&H00777777,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,150,1
 Style: PNoteV,Pretendard ExtraBold,58,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,14,0,8,60,60,540,1
 Style: Outro,Pretendard ExtraBold,58,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,18,0,7,0,0,0,1
+Style: Prev,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,12,0,7,0,0,0,1
 Style: Badge,Pretendard ExtraBold,42,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,12,0,7,0,0,0,1
 Style: Arrow,Pretendard ExtraBold,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,5,0,7,0,0,0,1
 Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,4,0,2,60,60,120,1
@@ -285,7 +290,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines += [f"Dialogue: 0,{ts(a)},{ts(b)},{'PCap' if pick else 'Cap'},,0,0,0,,{pop}{text}" for a, b, text in timeline]
     lines += list(extra)
     if tail:
-        lines += outro(tail, end)
+        lines += outro(tail, end, tail_dur)
     return head + "\n".join(lines) + "\n"
 
 def make(script, out):
@@ -395,11 +400,15 @@ def make(script, out):
         # series badge ("샤바니 #12") pinned to the picture's top-left corner the whole time, so feed viewers learn the series
         by = PICK_TOP + 20 if pick else ZOOM_TOP + 20
         badge = [f"Dialogue: 2,{ts(0)},{ts(t)},Badge,,0,0,0,,{{\\pos(36,{by})}}{script['badge']}"] if script.get("badge") else []
+        if script.get("prev"):  # part 2 of a 2-part story: one line on what happened in part 1
+            badge.append(f"Dialogue: 2,{ts(0)},{ts(PREV_DUR)},Prev,,0,0,0,,{{\\pos(36,{by + 66})\\fad(0,200)}}{script['prev']}")
         # with an outro, also a copy without it (OUTRO_FREE): the weekly 16:9 compilation has no channel avatar to point at
-        outs = [(out, script.get("outro", ""))] + ([(OUTRO_FREE(out), "")] if script.get("outro") else [])
+        tail = script.get("next") or script.get("outro", "")
+        outs = [(out, tail)] + ([(OUTRO_FREE(out), "")] if tail else [])
         for k, (path, tail) in enumerate(outs):
             sub = os.path.join(tmp, f"s{k}.ass")
-            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail, marks + badge))
+            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail, marks + badge,
+                                     NEXT_DUR if script.get("next") else OUTRO))
             # no background music: original voices and the narration only
             ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
                "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
