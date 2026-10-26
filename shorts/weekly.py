@@ -4,7 +4,7 @@
     python3 weekly.py [--days 7] [--n 10] [--dry]   # --dry: pick and render to weekly.mp4, don't upload
 
 Picks the most-viewed public "<series> #n | ..." episodes of the last --days days (half per series when possible),
-using the 720p copies upload.py --episode keeps in Drive 쇼츠보관, and lays them out on a blurred 1920x1080 canvas
+using the archived copies upload.py --episode keeps in Drive 쇼츠보관, and crops each to its picture + captions on a blurred 1920x1080 canvas
 after the 0.7 s channel intro. Uploads public with chapters and the sources in the description, adds it to the
 "주간 몰아보기" playlist, then trashes the used week's copies from 쇼츠보관.
 """
@@ -16,6 +16,7 @@ SERIES = ["수달 사쿠라", "바다코끼리 히마와리", "고릴라 샤바�
 PLAYLIST = "주간 몰아보기"
 INTRO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "intro.mp4")
 MINT = "0xCDEEEA"
+CROP_TOP, CROP_H = 420, 1140  # make.py ZOOM_TOP, then the 960 px picture and the caption lines centred at y 1440
 
 def episodes(days):
     """Public series episodes published in the last `days` days: dicts with id, title, series, views, published, desc."""
@@ -64,7 +65,9 @@ def render(clips, out, tmp):
         seg = os.path.join(tmp, f"{k}.mp4")
         ff("-i", path, "-filter_complex",
            "[0:v]split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=30:5,eq=brightness=-0.15[bg];"
-           f"[b]scale=-2:1080[fg];[bg][fg]overlay=(W-w)/2:0,setsar=1,"
+           # only the Short's picture + caption band (y 420-1560 of 1080x1920): the title strip on top and the empty
+           # bottom are dropped, so the animal is ~1.7x bigger than the whole 9:16 frame would be
+           f"[b]crop=iw:ih*{CROP_H}/1920:0:ih*{CROP_TOP}/1920,scale=-2:1080[fg];[bg][fg]overlay=(W-w)/2:0,setsar=1,"
            f"drawtext=fontfile={fontfile}:textfile={txt}:x=60:y=60:fontsize=54:fontcolor=white:box=1:boxcolor=0xFF2E7E:boxborderw=18[v]",
            "-map", "[v]", "-map", "0:a", *enc, seg)
         parts.append(seg)

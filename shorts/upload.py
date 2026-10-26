@@ -5,7 +5,7 @@
     python3 upload.py video.mp4 --title "..." --desc "..." --publish-at 2026-10-15T07:30:00+09:00   # scheduled
     python3 upload.py ... --playlist "수달 사쿠라"   # also add it to this playlist (created public if missing)
     python3 upload.py ... --playlist "수달 사쿠라" --episode   # title becomes "수달 사쿠라 #13 | ..." (next number),
-                                                             # and a 720p copy goes to Drive 쇼츠보관 for weekly.py
+                                                             # and a 1080p copy goes to Drive 쇼츠보관 for weekly.py
     python3 upload.py ... --playlist "수달 사쿠라" --first     # character intro: top of the playlist, no number
     python3 upload.py ... --title-ja "..." --summary-ja "..." --title-en "..." --summary-en "..."
                                      # what Japanese / English viewers see (with --episode the number is added to these too)
@@ -114,11 +114,11 @@ def drive_put(path, name, folder):
         return json.load(r)["id"]
 
 def archive(path, vid):
-    """Keep a 720p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~5MB; weekly.py trashes it after use),
+    """Keep a 1080p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~10MB; weekly.py trashes it after use),
     made from the outro-free render when make.py left one next to it."""
     small = path + ".archive.mp4"
     clean = os.path.splitext(path)[0] + ".no-outro.mp4"  # make.py's copy without the outro arrow, when there is one
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", clean if os.path.exists(clean) else path, "-vf", "scale=720:-2", "-c:v", "libx264", "-preset", "veryfast",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", clean if os.path.exists(clean) else path, "-vf", "scale=1080:-2", "-c:v", "libx264", "-preset", "veryfast",
                     "-crf", "26", "-c:a", "aac", "-b:a", "128k", small], check=True)
     try:
         drive_put(small, f"{vid}.mp4", ARCHIVE)
