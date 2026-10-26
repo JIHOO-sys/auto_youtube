@@ -18,6 +18,7 @@ script.json:
      "source": "optional local long-form video; then scenes use "src": [start seconds, ...] instead of query,
                 or {"orig": [start, end], "lines": [[start, "도겸", "what they say"], ...]} to play the original
                 moment with its own sound, captioned per line with the speaker's name ("" when unsure)",
+     "badge": "optional series badge shown top-left of the picture all along, e.g. "샤바니 #12"",
      a "say" scene may set "silent": true - the line shows as the usual caption but is not voiced; the source's sound
                 plays at full volume for as long as the line takes to read (or "dur" seconds)
      any source scene may set "cx": where the animal is across the SOURCE frame (0..1, default 0.5) - wide sources are
@@ -259,6 +260,7 @@ Style: PNote,Pretendard ExtraBold,66,&H00000000,&H00000000,&H00FFFFFF,&H00000000
 Style: PCredit,Pretendard ExtraBold,44,&H00777777,&H00777777,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,150,1
 Style: PNoteV,Pretendard ExtraBold,58,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,14,0,8,60,60,540,1
 Style: Outro,Pretendard ExtraBold,58,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,18,0,7,0,0,0,1
+Style: Badge,Pretendard ExtraBold,42,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,12,0,7,0,0,0,1
 Style: Arrow,Pretendard ExtraBold,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,5,0,7,0,0,0,1
 Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,4,0,2,60,60,120,1
 
@@ -390,11 +392,14 @@ def make(script, out):
         ff("-f", "concat", "-safe", "0", "-i", lst("v.txt", vparts), "-c", "copy", os.path.join(tmp, "v.mp4"))
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
+        # series badge ("샤바니 #12") pinned to the picture's top-left corner the whole time, so feed viewers learn the series
+        by = PICK_TOP + 20 if pick else ZOOM_TOP + 20
+        badge = [f"Dialogue: 2,{ts(0)},{ts(t)},Badge,,0,0,0,,{{\\pos(36,{by})}}{script['badge']}"] if script.get("badge") else []
         # with an outro, also a copy without it (OUTRO_FREE): the weekly 16:9 compilation has no channel avatar to point at
         outs = [(out, script.get("outro", ""))] + ([(OUTRO_FREE(out), "")] if script.get("outro") else [])
         for k, (path, tail) in enumerate(outs):
             sub = os.path.join(tmp, f"s{k}.ass")
-            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail, marks))
+            open(sub, "w").write(ass(script.get("title", ""), timeline, cap_y, pick, t, tail, marks + badge))
             # no background music: original voices and the narration only
             ff("-i", os.path.join(tmp, "v.mp4"), "-i", os.path.join(tmp, "a.wav"),
                "-vf", f"subtitles={sub}:fontsdir={fontsdir}", "-map", "0:v", "-map", "1:a", "-t", f"{t:.3f}",
