@@ -3,6 +3,7 @@
 
     python3 make.py script.json --sheet DIR   # candidate thumbnails per scene, pick ids into "clips"
     python3 make.py script.json [-o out.mp4]
+    python3 make.py source.mp4 --motion       # per-second motion: scenes must come from the moving parts
 
 script.json:
     {"title": "상단 고정 제목\\n*강조*는 노란색",
@@ -87,6 +88,17 @@ CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
 CAP_MAX = 2.0   # a caption that stays longer reads as a stall (retention drops there): warn
 MAX_LEN = 25    # seconds; viewers stay ~12 s on average, so 15-20 s Shorts, never over this
 HOOK_MAX = 0.8  # "hook": the funniest moment flashed first, before scene 1
+MOTION_MIN = 6.0  # mean frame-to-frame change (0-255 grey, 64x36, 5 fps) below this = a still shot: never used
+
+def motion(src, start, dur, box=None):
+    """How much the picture moves from start for dur seconds, inside box (x0, y0, w, h: the part the Short shows) or
+    the top 80% (burned-in subtitles popping in would count as motion). ~2 = a sleeping walrus on a fixed camera,
+    5-9 = slow, 15+ = lively."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{max(dur, 0.6):.2f}", "-i", src, "-an", "-vf",
+                          (f"crop={box[2]}:{box[3]}:{box[0]}:{box[1]}" if box else "crop=iw:ih*0.8:0:0") + ",fps=5,scale=64:36,format=gray", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    f = np.frombuffer(raw, np.uint8).reshape(-1, 36, 64).astype(float)
+    return float(np.abs(np.diff(f, axis=0)).mean()) if len(f) > 1 else 0.0
 NEXT_DUR = 1.5  # a 2-part story's "다음 화: ..." teaser replaces the outro line, shorter so the loop isn't held up
 PREV_DUR = 1.5  # ...and part 2 opens with a "지난 화: ..." line for viewers who meet it first
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
@@ -343,7 +355,7 @@ def make(script, out):
                     return round(px * ZOOM_W), round(ZOOM_TOP + py * ZOOM_H)
                 dh = 1080 * h / w  # full width, centred over the blurred copy
                 return round(px * 1080), round((1920 - dh) / 2 + py * dh)
-        scenes = script["scenes"]
+        scenes, still = script["scenes"], []
         if script.get("hook"):
             # the funniest moment first, with its own sound and no caption - what the feed shows before anyone swipes
             a, b = script["hook"]["at"]
@@ -390,6 +402,11 @@ def make(script, out):
                     os.replace(mixed, wav)
             d = duration(wav)
             aparts.append(wav)
+            if script.get("source") and s.get("src"):
+                box = None if pick else window(sw, sh, **view(s))
+                m = sum(motion(script["source"], st, d / len(s["src"]), box) for st in s["src"]) / len(s["src"])
+                if m < MOTION_MIN:
+                    still.append(f"scene {i} at {s['src'][0]:.1f}s (motion {m:.1f} < {MOTION_MIN})")
             for a0, a1, x, y, size in s.get("cover", []):
                 px, py = screen(x, y, s)
                 marks += cover_lines(t + a0, t + min(a1, d), px, py, round(size * 1080))
@@ -424,6 +441,8 @@ def make(script, out):
                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
                 vparts.append(seg)
             t += d
+        if still:  # a picture that just sits there is where viewers swipe away
+            sys.exit("still shots - pick moving moments (make.py --motion SOURCE): " + "; ".join(still))
         lst = lambda name, parts: (open(os.path.join(tmp, name), "w").write("".join(f"file '{p}'\n" for p in parts)), os.path.join(tmp, name))[1]
         ff("-f", "concat", "-safe", "0", "-i", lst("v.txt", vparts), "-c", "copy", os.path.join(tmp, "v.mp4"))
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
@@ -450,7 +469,15 @@ def make(script, out):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("script"); p.add_argument("-o", "--out", default="short.mp4"); p.add_argument("--sheet")
+    p.add_argument("--motion", action="store_true", help="print how much each second of the script (source) moves")
     a = p.parse_args()
+    if a.motion:  # script may be just the source video here
+        src = a.script if a.script.endswith((".mp4", ".mkv", ".webm", ".mov")) else json.load(open(a.script))["source"]
+        n = int(float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src])))
+        for k in range(n):
+            m = motion(src, k, 1)
+            print(f"{k // 60}:{k % 60:02d} {m:5.1f} {'still' if m < MOTION_MIN else '#' * min(40, round(m))}")
+        sys.exit()
     script = json.load(open(a.script))
     says = [i for i, s in enumerate(script["scenes"]) if s.get("say")]
     if script.get("style") == "pick" and says: sys.exit("pick style has no narration: use orig scenes only")
