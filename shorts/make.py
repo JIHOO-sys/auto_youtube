@@ -3,6 +3,7 @@
 
     python3 make.py script.json --sheet DIR   # candidate thumbnails per scene, pick ids into "clips"
     python3 make.py script.json [-o out.mp4]
+    python3 make.py script.json --frames DIR  # framing check: is everything that matters inside the shown window?
     python3 make.py source.mp4 --motion       # per-second motion: scenes must come from the moving parts
 
 script.json:
@@ -28,6 +29,9 @@ script.json:
                 cropped around it to fill over half the screen - and "zoom" (1..2.5, default 1): closer in, for far shots
                 where the animal would be small
      "max_len": "optional cap in seconds instead of MAX_LEN, only for a character intro",
+     any source scene should set "box": [x0, y0, x1, y1] (0..1 of the SOURCE frame) around everything that must be seen
+                for the whole scene - the character's full body, what it wants (toy, food), other animals; the zoom never
+                cuts into it (then "cx"/"cy" are not needed and "zoom" is only an upper limit). Check with --frames
      "cut_bottom": "optional share of the source height to drop, e.g. 0.2 when the source has subtitles burned in"
      "hook": "optional {"at": [start, end], "cx": .., "zoom": ..} - the funniest moment (<= HOOK_MAX s, own sound, no
               caption) flashed first, before scene 1"
@@ -54,24 +58,41 @@ FIT = ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase
 # so the animal reads at feed size - instead of the whole 16:9 frame as a thin 608 px band
 ZOOM_W, ZOOM_H, ZOOM_TOP = 1080, 960, 420  # top sits just under the 2-line title
 
-def window(sw, sh, cx=0.5, cy=0.5, zoom=1.0, cut=0.0):
+ZOOM_MAX = 2.0  # closer than this gets blurry: a "box" without "zoom" is framed no tighter
+BOX_PAD = 0.08  # room kept around "box" on every side, as a share of its size
+
+def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
     """The part of the source shown sharp, (x0, y0, w, h) in source pixels: the bottom `cut` share is dropped (subtitles
     burned into the source), then a window 1/zoom of what is left, centred on the animal at cx, cy where it fits.
-    Wide sources get a 9:8 window (shown 1080x960), narrow ones keep their own shape."""
+    Wide sources get a 9:8 window (shown 1080x960), narrow ones keep their own shape.
+    box = [x0, y0, x1, y1] (0..1 of the source): everything that must stay in the picture for the whole scene - the
+    character's full body, what it is after, other animals. The window always holds all of it (zoom only goes as close
+    as that allows; a box wider than 9:8 gets a wider window, shown letterboxed in the same band)."""
     uh = sh * (1 - cut)
-    if sw / uh > ZOOM_W / ZOOM_H:
-        h = uh / zoom; w = h * ZOOM_W / ZOOM_H
-    else:
-        w, h = sw / zoom, uh / zoom
+    a = ZOOM_W / ZOOM_H if sw / uh > ZOOM_W / ZOOM_H else sw / uh
+    w = min(uh * a, sw) / (zoom or (ZOOM_MAX if box else 1.0))
+    if box:
+        bx0, by0, bx1, by1 = box[0] * sw, box[1] * sh, box[2] * sw, min(box[3] * sh, uh)
+        pw, ph = (bx1 - bx0) * BOX_PAD, (by1 - by0) * BOX_PAD
+        bx0, by0, bx1, by1 = max(bx0 - pw, 0), max(by0 - ph, 0), min(bx1 + pw, sw), min(by1 + ph, uh)
+        cx, cy = (bx0 + bx1) / 2 / sw, (by0 + by1) / 2 / sh
+        w = max(w, bx1 - bx0, (by1 - by0) * a)
+    w = min(w, sw)
+    h = min(w / a, uh)
     return (round(min(max(cx * sw - w / 2, 0), sw - w)), round(min(max(cy * sh - h / 2, 0), uh - h)), round(w), round(h))
 
-def fit(sw, sh, cx=0.5, cy=0.5, zoom=1.0, cut=0.0):
-    x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut)
-    bg = ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
-          f"eq=brightness=-0.12[bg];[b]crop={w}:{h}:{x0}:{y0},")
+def shown(sw, sh, cut, w, h):
+    """Where window() lands on the 1080x1920 screen: (top y, height); always 1080 wide."""
+    dh = 2 * round(540 * h / w)
     if sw / (sh * (1 - cut)) <= ZOOM_W / ZOOM_H:  # already narrow (phone footage): full width, centred
-        return bg + "scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1"
-    return bg + f"scale={ZOOM_W}:{ZOOM_H}[fg];[bg][fg]overlay=0:{ZOOM_TOP},fps=30,setsar=1"
+        return (1920 - dh) // 2, dh
+    return ZOOM_TOP + (ZOOM_H - dh) // 2, dh  # 9:8 fills the 960 band; a wider box sits letterboxed in it
+
+def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
+    x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut, box)
+    top, dh = shown(sw, sh, cut, w, h)
+    return ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
+            f"eq=brightness=-0.12[bg];[b]crop={w}:{h}:{x0}:{y0},scale=1080:{dh}[fg];[bg][fg]overlay=0:{top},fps=30,setsar=1")
 
 # "pick" style: picture in a 1080x810 band on white, header (brand + title) above, comment + credit below
 PICK_TOP = 520
@@ -217,6 +238,38 @@ def clip_urls(scene, n, used):
     used.update(h["id"] for h in picked)
     return [h["videos"]["medium"]["url"] or h["videos"]["small"]["url"] for h in picked]
 
+def frames(script, outdir):
+    """framing check, one image per scene (hook = scene 0 when there is one): source frames at the start, middle and end
+    of every cut with the shown window drawn in green - the character's whole body, what it is after and the other
+    animals must stay inside it in every frame, or widen "box"."""
+    os.makedirs(outdir, exist_ok=True)
+    src, cut = script["source"], script.get("cut_bottom", 0.0)
+    sw, sh = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                               "stream=width,height", "-of", "csv=p=0", src]).decode().split(",")[:2])
+    scenes = ([{**script["hook"], "orig": script["hook"]["at"]}] if script.get("hook") else []) + script["scenes"]
+    for i, s in enumerate(scenes):
+        if s.get("orig"):
+            starts, d = [s["orig"][0]], s["orig"][1] - s["orig"][0]
+        else:
+            starts = s.get("src") or []
+            line = TAGS.sub("", s.get("say", "")).replace("*", "")
+            d = s.get("dur") or max(SILENT_MIN, len(line) / (READ_CPS if s.get("silent") else 5))  # TTS reads ~5 chars/s
+        if not starts:
+            continue
+        x0, y0, w, h = window(sw, sh, s.get("cx", 0.5), s.get("cy", 0.5), s.get("zoom"), cut, s.get("box"))
+        with tempfile.TemporaryDirectory() as tmp:
+            shots = []
+            for st in starts:
+                for k, at in enumerate((st + 0.1, st + d / len(starts) / 2, st + d / len(starts) - 0.1)):
+                    shot = os.path.join(tmp, f"{len(shots)}.png")
+                    ff("-ss", f"{max(at, 0):.2f}", "-i", src, "-frames:v", "1", "-vf",
+                       f"drawbox={x0}:{y0}:{w}:{h}:0x00FF00:t=8,drawbox=0:{round(sh * (1 - cut))}:iw:ih:black@0.6:t=fill,scale=480:-2", shot)
+                    shots.append(shot)
+            ff(*sum([["-i", p] for p in shots], []), "-filter_complex",
+               "".join(f"[{j}:v]" for j in range(len(shots))) + f"xstack=inputs={len(shots)}:grid=3x{len(starts)}" if len(shots) > 3 else
+               "".join(f"[{j}:v]" for j in range(len(shots))) + f"hstack=inputs={len(shots)}", os.path.join(outdir, f"scene{i}.png"))
+    print(f"framing check in {outdir}: green = what the Short shows")
+
 def sheet(script, outdir):
     """Contact sheet of the top 8 candidates per scene, labelled 0-7, so a human/Claude can pick clip ids."""
     os.makedirs(outdir, exist_ok=True)
@@ -340,7 +393,7 @@ def make(script, out):
                                                        "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2])
             cut = script.get("cut_bottom", 0.0)
             ch = sh * (1 - cut)  # source height left once burned-in subtitles are cut off
-            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom", 1.0), cut=cut)
+            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom"), cut=cut, box=s.get("box"))
             def screen(x, y, s):
                 """Source-frame fraction -> output pixel, following fit() / FIT_PICK / FIT_PICK_V."""
                 if pick and not pick["vertical"]:  # cover 1080x810 at PICK_TOP
@@ -350,11 +403,8 @@ def make(script, out):
                     k = max(1080 / sw, 1920 / ch)
                     return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (ch * k - 1920) / 2)
                 x0, y0, w, h = window(sw, sh, **view(s))
-                px, py = (x * sw - x0) / w, (y * sh - y0) / h
-                if sw / ch > ZOOM_W / ZOOM_H:  # the 9:8 window, 1080x960 at ZOOM_TOP
-                    return round(px * ZOOM_W), round(ZOOM_TOP + py * ZOOM_H)
-                dh = 1080 * h / w  # full width, centred over the blurred copy
-                return round(px * 1080), round((1920 - dh) / 2 + py * dh)
+                top, dh = shown(sw, sh, cut, w, h)
+                return round((x * sw - x0) / w * 1080), round(top + (y * sh - y0) / h * dh)
         scenes, still = script["scenes"], []
         if script.get("hook"):
             # the funniest moment first, with its own sound and no caption - what the feed shows before anyone swipes
@@ -469,6 +519,7 @@ def make(script, out):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("script"); p.add_argument("-o", "--out", default="short.mp4"); p.add_argument("--sheet")
+    p.add_argument("--frames", metavar="DIR", help="framing check images per scene (source scripts), then stop")
     p.add_argument("--motion", action="store_true", help="print how much each second of the script (source) moves")
     a = p.parse_args()
     if a.motion:  # script may be just the source video here
@@ -485,6 +536,8 @@ if __name__ == "__main__":
     # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
     if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
+    if a.frames:
+        frames(script, a.frames); sys.exit()
     need = (["GOOGLE_TTS_KEY"] if says else []) + ([] if script.get("source") else ["PIXABAY_API_KEY"])
     missing = [k for k in need if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
