@@ -23,8 +23,13 @@ script.json:
      "badge": "optional series badge shown top-left of the picture all along, e.g. "샤바니 #12"",
      a "say" scene may set "silent": true - the line shows as the usual caption but is not voiced; the source's sound
                 plays at full volume for as long as the line takes to read (or "dur" seconds)
-     any source scene may set "cx": where the animal is across the SOURCE frame (0..1, default 0.5) - wide sources are
-                cropped around it to fill over half the screen
+     any source scene may set "cx" / "cy": where the animal is in the SOURCE frame (0..1, default 0.5) - wide sources are
+                cropped around it to fill over half the screen - and "zoom" (1..2.5, default 1): closer in, for far shots
+                where the animal would be small
+     "max_len": "optional cap in seconds instead of MAX_LEN, only for a character intro",
+     "cut_bottom": "optional share of the source height to drop, e.g. 0.2 when the source has subtitles burned in"
+     "hook": "optional {"at": [start, end], "cx": .., "zoom": ..} - the funniest moment (<= HOOK_MAX s, own sound, no
+              caption) flashed first, before scene 1"
      any scene may add "cover": [[from, to (seconds into the scene), x, y, width as a share of the 1080 px frame], ...]
                 - a big pulsing pink heart hiding that spot (mating and the like)
      any scene may add "fx": [[seconds into the scene, kind, x, y], ...] - a small manga-style mark by the animal's face,
@@ -48,12 +53,24 @@ FIT = ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase
 # so the animal reads at feed size - instead of the whole 16:9 frame as a thin 608 px band
 ZOOM_W, ZOOM_H, ZOOM_TOP = 1080, 960, 420  # top sits just under the 2-line title
 
-def fit(sw, sh, cx=0.5):
-    if sw / sh <= ZOOM_W / ZOOM_H:  # already narrow (phone footage): the old full-width fit
-        return FIT
-    return ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
-            f"eq=brightness=-0.12[bg];[b]crop=w=ih*{ZOOM_W}/{ZOOM_H}:h=ih:x='max(0,min(iw-ow,{cx}*iw-ow/2))':y=0,"
-            f"scale={ZOOM_W}:{ZOOM_H}[fg];[bg][fg]overlay=0:{ZOOM_TOP},fps=30,setsar=1")
+def window(sw, sh, cx=0.5, cy=0.5, zoom=1.0, cut=0.0):
+    """The part of the source shown sharp, (x0, y0, w, h) in source pixels: the bottom `cut` share is dropped (subtitles
+    burned into the source), then a window 1/zoom of what is left, centred on the animal at cx, cy where it fits.
+    Wide sources get a 9:8 window (shown 1080x960), narrow ones keep their own shape."""
+    uh = sh * (1 - cut)
+    if sw / uh > ZOOM_W / ZOOM_H:
+        h = uh / zoom; w = h * ZOOM_W / ZOOM_H
+    else:
+        w, h = sw / zoom, uh / zoom
+    return (round(min(max(cx * sw - w / 2, 0), sw - w)), round(min(max(cy * sh - h / 2, 0), uh - h)), round(w), round(h))
+
+def fit(sw, sh, cx=0.5, cy=0.5, zoom=1.0, cut=0.0):
+    x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut)
+    bg = ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
+          f"eq=brightness=-0.12[bg];[b]crop={w}:{h}:{x0}:{y0},")
+    if sw / (sh * (1 - cut)) <= ZOOM_W / ZOOM_H:  # already narrow (phone footage): full width, centred
+        return bg + "scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1"
+    return bg + f"scale={ZOOM_W}:{ZOOM_H}[fg];[bg][fg]overlay=0:{ZOOM_TOP},fps=30,setsar=1"
 
 # "pick" style: picture in a 1080x810 band on white, header (brand + title) above, comment + credit below
 PICK_TOP = 520
@@ -67,6 +84,9 @@ CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
 READ_CPS, SILENT_MIN = 6, 1.6  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
 CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
+CAP_MAX = 2.0   # a caption that stays longer reads as a stall (retention drops there): warn
+MAX_LEN = 25    # seconds; viewers stay ~12 s on average, so 15-20 s Shorts, never over this
+HOOK_MAX = 0.8  # "hook": the funniest moment flashed first, before scene 1
 NEXT_DUR = 1.5  # a 2-part story's "다음 화: ..." teaser replaces the outro line, shorter so the loop isn't held up
 PREV_DUR = 1.5  # ...and part 2 opens with a "지난 화: ..." line for viewers who meet it first
 OUTRO = 2.5    # seconds the "outro" line stays on, over the end of the last scene
@@ -306,21 +326,29 @@ def make(script, out):
         if script.get("source"):
             sw, sh = map(int, subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                                        "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2])
-            def screen(x, y, cx=0.5):
+            cut = script.get("cut_bottom", 0.0)
+            ch = sh * (1 - cut)  # source height left once burned-in subtitles are cut off
+            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom", 1.0), cut=cut)
+            def screen(x, y, s):
                 """Source-frame fraction -> output pixel, following fit() / FIT_PICK / FIT_PICK_V."""
                 if pick and not pick["vertical"]:  # cover 1080x810 at PICK_TOP
-                    k = max(1080 / sw, 810 / sh)
-                    return round(x * sw * k - (sw * k - 1080) / 2), round(PICK_TOP + y * sh * k - (sh * k - 810) / 2)
+                    k = max(1080 / sw, 810 / ch)
+                    return round(x * sw * k - (sw * k - 1080) / 2), round(PICK_TOP + y * sh * k - (ch * k - 810) / 2)
                 if pick:  # cover the whole screen
-                    k = max(1080 / sw, 1920 / sh)
-                    return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (sh * k - 1920) / 2)
-                if sw / sh > ZOOM_W / ZOOM_H:  # the cropped 9:8 window around cx
-                    cw = sh * ZOOM_W / ZOOM_H
-                    x0 = min(max(cx * sw - cw / 2, 0), sw - cw)
-                    return round((x * sw - x0) / cw * ZOOM_W), round(ZOOM_TOP + y * ZOOM_H)
-                h = 1080 * sh / sw  # full width, centred over the blurred copy
-                return round(x * 1080), round((1920 - h) / 2 + y * h)
-        for i, s in enumerate(script["scenes"]):
+                    k = max(1080 / sw, 1920 / ch)
+                    return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (ch * k - 1920) / 2)
+                x0, y0, w, h = window(sw, sh, **view(s))
+                px, py = (x * sw - x0) / w, (y * sh - y0) / h
+                if sw / ch > ZOOM_W / ZOOM_H:  # the 9:8 window, 1080x960 at ZOOM_TOP
+                    return round(px * ZOOM_W), round(ZOOM_TOP + py * ZOOM_H)
+                dh = 1080 * h / w  # full width, centred over the blurred copy
+                return round(px * 1080), round((1920 - dh) / 2 + py * dh)
+        scenes = script["scenes"]
+        if script.get("hook"):
+            # the funniest moment first, with its own sound and no caption - what the feed shows before anyone swipes
+            a, b = script["hook"]["at"]
+            scenes = [{**script["hook"], "orig": [a, min(b, a + HOOK_MAX)]}] + scenes
+        for i, s in enumerate(scenes):
             wav = os.path.join(tmp, f"{i}.wav")
             if s.get("orig"):
                 # the people's own voices: play the source moment with its sound, captioned
@@ -363,22 +391,25 @@ def make(script, out):
             d = duration(wav)
             aparts.append(wav)
             for a0, a1, x, y, size in s.get("cover", []):
-                px, py = screen(x, y, s.get("cx", 0.5))
+                px, py = screen(x, y, s)
                 marks += cover_lines(t + a0, t + min(a1, d), px, py, round(size * 1080))
             for off, kind, x, y in s.get("fx", []):
-                px, py = screen(x, y, s.get("cx", 0.5))
+                px, py = screen(x, y, s)
                 marks += fx_lines(t + min(off, max(d - 0.3, 0)), kind, min(max(px, 70), 1010), min(max(py, 80), 1840))
             # captions: spread over the scene by character count
             cs = chunks(TAGS.sub("", s["say"])) if s["say"] else []; total = sum(n for n, _ in cs) or 1; c = t
             for n, text in cs:
                 timeline.append((c, c + d * n / total, text)); c += d * n / total
+            if cs and d / len(cs) > CAP_MAX:
+                print(f"warning: scene {i} holds each caption {d / len(cs):.1f}s (> {CAP_MAX}s) - split the line or the scene", file=sys.stderr)
             if s.get("src"):
                 # review mode: cuts of the source video at the given start times, fitted over a blurred copy
                 starts = s["src"]
                 for j, st in enumerate(starts):
                     seg = os.path.join(tmp, f"{i}_{j}.mp4")
                     ff("-ss", f"{st:.2f}", "-i", script["source"], "-t", f"{d / len(starts):.3f}", "-an",
-                       "-filter_complex", (FIT_PICK_V if pick["vertical"] else FIT_PICK) if pick else fit(sw, sh, s.get("cx", 0.5)), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
+                       "-filter_complex", (FIT_PICK_V if pick["vertical"] else FIT_PICK).replace("[0:v]", f"[0:v]crop=iw:ih*{1 - cut:.3f}:0:0,", 1)
+                       if pick else fit(sw, sh, **view(s)), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
                     vparts.append(seg)
                 t += d
                 continue
@@ -438,4 +469,4 @@ if __name__ == "__main__":
     out = make(script, a.out)
     d = duration(out)
     print(f"{out} ({d:.1f}s)")
-    if d > 59: print("warning: over 59s", file=sys.stderr)
+    if d > script.get("max_len", MAX_LEN): sys.exit(f"too long: {d:.1f}s > {script.get('max_len', MAX_LEN)}s - cut scenes (aim for 15-20 s) and make it again")
