@@ -30,7 +30,9 @@ script.json:
                 where the animal would be small
      "max_len": "optional cap in seconds instead of MAX_LEN, only for a character intro",
      any source scene must set "subject": [x0, y0, x1, y1] - the main character's whole body for the whole scene (never
-                cut; it must fill SUBJECT_MIN of the picture) - and may set "box": [x0, y0, x1, y1] (0..1 of the SOURCE frame) around everything that must be seen
+                cut; it must fill SUBJECT_MIN of the picture) - and may set "box": [x0, y0, x1, y1]
+     a scene may set "cutaway": true when the story shows what the main character deals with (the other animal, the toy,
+                the food) without the character in it: "subject" is then that animal / thing, held to the same rules (0..1 of the SOURCE frame) around everything that must be seen
                 for the whole scene - the character's full body, what it wants (toy, food), other animals; the zoom never
                 cuts into it (then "cx"/"cy" are not needed and "zoom" is only an upper limit). Check with --frames
      "cut_bottom": "optional share of the source height to drop, e.g. 0.2 when the source has subtitles burned in"
@@ -480,7 +482,8 @@ def make(script, out):
                 if m < MOTION_MIN:
                     problems.append(f"scene {i} at {s['src'][0]:.1f}s is a still shot (motion {m:.1f} < {MOTION_MIN}) - pick a moving moment (--motion)")
                 if script.get("badge") and not s.get("subject"):
-                    problems.append(f"scene {i} has no \"subject\" (the main character's whole body)")
+                    problems.append(f"scene {i} has no \"subject\" (the main character's whole body, or with \"cutaway\" "
+                                    "the animal / thing it deals with)")
                 elif s.get("subject"):
                     x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H if pick else None,
                                           zoom=s.get("zoom")) if not (pick and pick["vertical"]) else (0, 0, sw, ch)
