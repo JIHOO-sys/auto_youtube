@@ -199,6 +199,9 @@ if __name__ == "__main__":
     names = SERIES_NAMES.get(a.playlist, {})
     if a.episode:
         if not a.playlist: p.error("--episode needs --playlist")
+        d = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", a.video]))
+        if d > 25.5:  # make.py's MAX_LEN; episodes are 15-20 s Shorts (character intros go up without --episode)
+            p.error(f"episode is {d:.1f}s - over 25 s: cut it in the script and make it again")
         n = next_episode(a.playlist)
         a.title = episode_title(a.playlist, a.title, n)
         a.title_ja = a.title_ja and episode_title(a.playlist, a.title_ja, n, names.get("ja"))

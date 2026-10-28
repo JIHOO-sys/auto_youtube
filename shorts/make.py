@@ -29,7 +29,8 @@ script.json:
                 cropped around it to fill over half the screen - and "zoom" (1..2.5, default 1): closer in, for far shots
                 where the animal would be small
      "max_len": "optional cap in seconds instead of MAX_LEN, only for a character intro",
-     any source scene should set "box": [x0, y0, x1, y1] (0..1 of the SOURCE frame) around everything that must be seen
+     any source scene must set "subject": [x0, y0, x1, y1] - the main character's whole body for the whole scene (never
+                cut; it must fill SUBJECT_MIN of the picture) - and may set "box": [x0, y0, x1, y1] (0..1 of the SOURCE frame) around everything that must be seen
                 for the whole scene - the character's full body, what it wants (toy, food), other animals; the zoom never
                 cuts into it (then "cx"/"cy" are not needed and "zoom" is only an upper limit). Check with --frames
      "cut_bottom": "optional share of the source height to drop, e.g. 0.2 when the source has subtitles burned in"
@@ -61,15 +62,17 @@ ZOOM_W, ZOOM_H, ZOOM_TOP = 1080, 960, 420  # top sits just under the 2-line titl
 ZOOM_MAX = 2.0  # closer than this gets blurry: a "box" without "zoom" is framed no tighter
 BOX_PAD = 0.08  # room kept around "box" on every side, as a share of its size
 
-def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
+def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, aspect=None):
     """The part of the source shown sharp, (x0, y0, w, h) in source pixels: the bottom `cut` share is dropped (subtitles
     burned into the source), then a window 1/zoom of what is left, centred on the animal at cx, cy where it fits.
     Wide sources get a 9:8 window (shown 1080x960), narrow ones keep their own shape.
     box = [x0, y0, x1, y1] (0..1 of the source): everything that must stay in the picture for the whole scene - the
     character's full body, what it is after, other animals. The window always holds all of it (zoom only goes as close
-    as that allows; a box wider than 9:8 gets a wider window, shown letterboxed in the same band)."""
+    as that allows; a box wider than 9:8 gets a wider window, shown letterboxed in the same band).
+    aspect: the band's own shape instead of 9:8 (the pick style's 1080x810)."""
     uh = sh * (1 - cut)
-    a = ZOOM_W / ZOOM_H if sw / uh > ZOOM_W / ZOOM_H else sw / uh
+    band = aspect or ZOOM_W / ZOOM_H
+    a = band if sw / uh > band else sw / uh
     w = min(uh * a, sw) / (zoom or (ZOOM_MAX if box else 1.0))
     if box:
         bx0, by0, bx1, by1 = box[0] * sw, box[1] * sh, box[2] * sw, min(box[3] * sh, uh)
@@ -88,6 +91,10 @@ def shown(sw, sh, cut, w, h):
         return (1920 - dh) // 2, dh
     return ZOOM_TOP + (ZOOM_H - dh) // 2, dh  # 9:8 fills the 960 band; a wider box sits letterboxed in it
 
+def union(*boxes):
+    boxes = [b for b in boxes if b]
+    return [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)] if boxes else None
+
 def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
     x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut, box)
     top, dh = shown(sw, sh, cut, w, h)
@@ -96,8 +103,18 @@ def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
 
 # "pick" style: picture in a 1080x810 band on white, header (brand + title) above, comment + credit below
 PICK_TOP = 520
-FIT_PICK = (f"[0:v]scale=1080:810:force_original_aspect_ratio=increase,crop=1080:810,setsar=1,"
-            f"pad=1080:1920:0:{PICK_TOP}:white,fps=30")
+PICK_W, PICK_H = 1080, 810
+
+def fit_pick(sw, sh, cut=0.0, box=None, **_):
+    """Wide source in the pick style: window() at 4:3 around "box", fitted into the 1080x810 band on white."""
+    x0, y0, w, h = window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0)
+    top, dh = pick_shown(w, h)
+    return (f"[0:v]crop={w}:{h}:{x0}:{y0},scale=1080:{dh},setsar=1,"
+            f"pad=1080:1920:0:{top}:white,fps=30")
+
+def pick_shown(w, h):
+    dh = min(PICK_H, 2 * round(540 * h / w))
+    return PICK_TOP + (PICK_H - dh) // 2, dh
 # vertical (phone-shot) source: full-screen picture, white title band over the top
 FIT_PICK_V = f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,drawbox=0:0:1080:{PICK_TOP - 20}:white:t=fill,fps=30"
 GREEN = r"&H3CFF5A&"  # pick-style speech captions, like the variety-show subtitles viewers know
@@ -106,7 +123,8 @@ CHUNK = 9      # max chars per caption pop
 YELLOW = r"{\c&H00E0FF&}"
 READ_CPS, SILENT_MIN = 6, 1.6  # caption-only ("silent") scenes: Korean chars read per second, shortest scene
 CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
-CAP_MAX = 2.0   # a caption that stays longer reads as a stall (retention drops there): warn
+CAP_MAX = 2.2   # a caption that stays longer reads as a stall (retention drops there): not made
+SUBJECT_MIN = 0.10  # the main character's body must fill at least this share of the picture (hook: twice that)
 MAX_LEN = 25    # seconds; viewers stay ~12 s on average, so 15-20 s Shorts, never over this
 HOOK_MAX = 0.8  # "hook": the funniest moment flashed first, before scene 1
 MOTION_MIN = 6.0  # mean frame-to-frame change (0-255 grey, 64x36, 5 fps) below this = a still shot: never used
@@ -256,7 +274,9 @@ def frames(script, outdir):
             d = s.get("dur") or max(SILENT_MIN, len(line) / (READ_CPS if s.get("silent") else 5))  # TTS reads ~5 chars/s
         if not starts:
             continue
-        x0, y0, w, h = window(sw, sh, s.get("cx", 0.5), s.get("cy", 0.5), s.get("zoom"), cut, s.get("box"))
+        box = union(s.get("box"), s.get("subject"))
+        x0, y0, w, h = (window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0) if script.get("style") == "pick"
+                        else window(sw, sh, s.get("cx", 0.5), s.get("cy", 0.5), s.get("zoom"), cut, box))
         with tempfile.TemporaryDirectory() as tmp:
             shots = []
             for st in starts:
@@ -393,19 +413,21 @@ def make(script, out):
                                                        "stream=width,height", "-of", "csv=p=0", script["source"]]).decode().split(",")[:2])
             cut = script.get("cut_bottom", 0.0)
             ch = sh * (1 - cut)  # source height left once burned-in subtitles are cut off
-            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom"), cut=cut, box=s.get("box"))
+            # "subject" (the main character's whole body) always stays in the picture, whatever "box" says
+            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom"), cut=cut, box=union(s.get("box"), s.get("subject")))
             def screen(x, y, s):
                 """Source-frame fraction -> output pixel, following fit() / FIT_PICK / FIT_PICK_V."""
-                if pick and not pick["vertical"]:  # cover 1080x810 at PICK_TOP
-                    k = max(1080 / sw, 810 / ch)
-                    return round(x * sw * k - (sw * k - 1080) / 2), round(PICK_TOP + y * sh * k - (ch * k - 810) / 2)
+                if pick and not pick["vertical"]:  # fit_pick's window in the 1080x810 band
+                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H, zoom=None if view(s)["box"] else 1.0)
+                    top, dh = pick_shown(w, h)
+                    return round((x * sw - x0) / w * 1080), round(top + (y * sh - y0) / h * dh)
                 if pick:  # cover the whole screen
                     k = max(1080 / sw, 1920 / ch)
                     return round(x * sw * k - (sw * k - 1080) / 2), round(y * sh * k - (ch * k - 1920) / 2)
                 x0, y0, w, h = window(sw, sh, **view(s))
                 top, dh = shown(sw, sh, cut, w, h)
                 return round((x * sw - x0) / w * 1080), round(top + (y * sh - y0) / h * dh)
-        scenes, still = script["scenes"], []
+        scenes, problems = script["scenes"], []
         if script.get("hook"):
             # the funniest moment first, with its own sound and no caption - what the feed shows before anyone swipes
             a, b = script["hook"]["at"]
@@ -456,7 +478,18 @@ def make(script, out):
                 box = None if pick else window(sw, sh, **view(s))
                 m = sum(motion(script["source"], st, d / len(s["src"]), box) for st in s["src"]) / len(s["src"])
                 if m < MOTION_MIN:
-                    still.append(f"scene {i} at {s['src'][0]:.1f}s (motion {m:.1f} < {MOTION_MIN})")
+                    problems.append(f"scene {i} at {s['src'][0]:.1f}s is a still shot (motion {m:.1f} < {MOTION_MIN}) - pick a moving moment (--motion)")
+                if script.get("badge") and not s.get("subject"):
+                    problems.append(f"scene {i} has no \"subject\" (the main character's whole body)")
+                elif s.get("subject"):
+                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H if pick else None,
+                                          zoom=s.get("zoom")) if not (pick and pick["vertical"]) else (0, 0, sw, ch)
+                    b = s["subject"]
+                    share = (b[2] - b[0]) * sw * (min(b[3] * sh, ch) - b[1] * sh) / (w * h)
+                    need = SUBJECT_MIN * (2 if i == 0 and script.get("hook") else 1)
+                    if share < need:
+                        problems.append(f"scene {i}: the main character fills {share:.0%} of the picture (< {need:.0%}) - "
+                                        "too far away: a closer moment, or a tighter \"box\"")
             for a0, a1, x, y, size in s.get("cover", []):
                 px, py = screen(x, y, s)
                 marks += cover_lines(t + a0, t + min(a1, d), px, py, round(size * 1080))
@@ -468,15 +501,15 @@ def make(script, out):
             for n, text in cs:
                 timeline.append((c, c + d * n / total, text)); c += d * n / total
             if cs and d / len(cs) > CAP_MAX:
-                print(f"warning: scene {i} holds each caption {d / len(cs):.1f}s (> {CAP_MAX}s) - split the line or the scene", file=sys.stderr)
+                problems.append(f"scene {i} holds each caption {d / len(cs):.1f}s (> {CAP_MAX}s) - split the line or the scene")
             if s.get("src"):
                 # review mode: cuts of the source video at the given start times, fitted over a blurred copy
                 starts = s["src"]
                 for j, st in enumerate(starts):
                     seg = os.path.join(tmp, f"{i}_{j}.mp4")
                     ff("-ss", f"{st:.2f}", "-i", script["source"], "-t", f"{d / len(starts):.3f}", "-an",
-                       "-filter_complex", (FIT_PICK_V if pick["vertical"] else FIT_PICK).replace("[0:v]", f"[0:v]crop=iw:ih*{1 - cut:.3f}:0:0,", 1)
-                       if pick else fit(sw, sh, **view(s)), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
+                       "-filter_complex", (FIT_PICK_V.replace("[0:v]", f"[0:v]crop=iw:ih*{1 - cut:.3f}:0:0,", 1)
+                       if pick["vertical"] else fit_pick(sw, sh, **view(s))) if pick else fit(sw, sh, **view(s)), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
                     vparts.append(seg)
                 t += d
                 continue
@@ -491,8 +524,8 @@ def make(script, out):
                    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", seg)
                 vparts.append(seg)
             t += d
-        if still:  # a picture that just sits there is where viewers swipe away
-            sys.exit("still shots - pick moving moments (make.py --motion SOURCE): " + "; ".join(still))
+        if problems:  # still shots, tiny animals and stalled captions are where viewers swipe away
+            sys.exit("not made:\n  " + "\n  ".join(problems))
         lst = lambda name, parts: (open(os.path.join(tmp, name), "w").write("".join(f"file '{p}'\n" for p in parts)), os.path.join(tmp, name))[1]
         ff("-f", "concat", "-safe", "0", "-i", lst("v.txt", vparts), "-c", "copy", os.path.join(tmp, "v.mp4"))
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
@@ -536,6 +569,8 @@ if __name__ == "__main__":
     # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
     if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
+    if script.get("source") and "cut_bottom" not in script:
+        sys.exit('set "cut_bottom" (0 when the source has no subtitles burned in at the bottom; see PLAN.md)')
     if a.frames:
         frames(script, a.frames); sys.exit()
     need = (["GOOGLE_TTS_KEY"] if says else []) + ([] if script.get("source") else ["PIXABAY_API_KEY"])
