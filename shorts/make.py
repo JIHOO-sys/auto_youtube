@@ -568,6 +568,9 @@ if __name__ == "__main__":
     script = json.load(open(a.script))
     says = [i for i, s in enumerate(script["scenes"]) if s.get("say")]
     if script.get("style") == "pick" and says: sys.exit("pick style has no narration: use orig scenes only")
+    # the dub concept: the inner voice is heard at 1-2 key moments - a dub Short with every line silent is a mistake
+    if script.get("dub") and not any(s.get("say") and not s.get("silent") for s in script["scenes"]):
+        sys.exit('dub Short with no voiced line: give the 1-2 key lines (turn, last line) a voice (drop "silent")')
     # review style: narration only as the opening hook and the closing line; the middle is the people themselves
     # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
     if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
