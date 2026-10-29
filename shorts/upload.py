@@ -27,6 +27,7 @@ def access_token(drive=False):
         return json.load(r)["access_token"]
 
 # series names viewers abroad know them by; Japanese fans search the original channels' spellings
+PICK_WINDOW = 10  # --pick-turn looks at each series' last this many episodes
 SERIES_NAMES = {"수달 사쿠라": {"ja": "カワウソさくら", "en": "Sakura the Otter"},
                 "바다코끼리 히마와리": {"ja": "セイウチのヒマワリ", "en": "Himawari the Walrus"},
                 "고릴라 샤바니": {"ja": "ゴリラのシャバーニ", "en": "Shabani the Gorilla"}}
@@ -181,6 +182,7 @@ def recent(pages=20, status=False):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("video", nargs="?"); p.add_argument("--title"); p.add_argument("--recent", action="store_true")
+    p.add_argument("--pick-turn", action="store_true", help="print which series gets this run's 하루한픽 (no dub) Short")
     p.add_argument("--desc", default=""); p.add_argument("--privacy", default="private")
     p.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-15T07:30:00+09:00")
     p.add_argument("--playlist", help="character series playlist title, e.g. 수달 사쿠라")
@@ -192,6 +194,17 @@ if __name__ == "__main__":
     a = p.parse_args()
     missing = [k for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN") if not os.environ.get(k)]
     if missing: sys.exit(f"missing env: {', '.join(missing)}")
+    if a.pick_turn:
+        # the series whose last PICK_WINDOW episodes hold the fewest 하루한픽, so every character keeps its dubbed voice
+        last = {}
+        for t, _, _ in recent(status=True):
+            m = re.match(r"(.+?) #\d+ \|", t)
+            if m and m.group(1) in SERIES_NAMES and len(last.setdefault(m.group(1), [])) < PICK_WINDOW:
+                last[m.group(1)].append("하루한픽" in t)
+        share = {k: sum(v) / len(v) for k, v in last.items()}
+        for k in sorted(share, key=share.get):
+            print(f"{k}\t하루한픽 {sum(last[k])}/{len(last[k])}")
+        sys.exit()
     if a.recent:
         print("\n".join(f"{t}\t{src}\t{st}" for t, src, st in recent(status=True))); sys.exit()  # st private = not yet published
     if not (a.video and a.title): p.error("video and --title are required")
