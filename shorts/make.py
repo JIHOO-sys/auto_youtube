@@ -127,7 +127,7 @@ READ_CPS, SILENT_MIN = 6, 1.6  # caption-only ("silent") scenes: Korean chars re
 CAP_TRIM = 0.2  # ...minus this much per caption pop (asked for snappier pacing)
 CAP_MAX = 2.2   # a caption that stays longer reads as a stall (retention drops there): not made
 SUBJECT_MIN = 0.10  # the main character's body must fill at least this share of the picture (hook: twice that)
-MAX_LEN = 18    # seconds; viewers stay ~13 s on average: 13-16 s Shorts are watched 80%+, aiming at a 60-70% average view
+MAX_LEN = 20    # seconds; viewers stay ~13 s on average: 16-18 s keeps a 70-80% average view and room for the story
 HOOK_MAX = 0.8  # "hook": the funniest moment flashed first, before scene 1
 MOTION_MIN = 6.0  # mean frame-to-frame change (0-255 grey, 64x36, 5 fps) below this = a still shot: never used
 
