@@ -35,7 +35,8 @@ script.json:
                 the food) without the character in it: "subject" is then that animal / thing, held to the same rules (0..1 of the SOURCE frame) around everything that must be seen
                 for the whole scene - the character's full body, what it wants (toy, food), other animals; the zoom never
                 cuts into it (then "cx"/"cy" are not needed and "zoom" is only an upper limit). Check with --frames
-     "cut_bottom": "optional share of the source height to drop, e.g. 0.2 when the source has subtitles burned in"
+     "cut_bottom": "optional share of the source height to drop - normally left out: burned-in subtitles may show,
+                    the picture comes first (cutting zooms in and narrows it)"
      "hook": "optional {"at": [start, end], "cx": .., "zoom": ..} - the funniest moment (<= HOOK_MAX s, own sound, no
               caption) flashed first, before scene 1"
      any scene may add "cover": [[from, to (seconds into the scene), x, y, width as a share of the 1080 px frame], ...]
@@ -587,8 +588,6 @@ if __name__ == "__main__":
     # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
     if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
-    if script.get("source") and "cut_bottom" not in script:
-        sys.exit('set "cut_bottom" (0 when the source has no subtitles burned in at the bottom; see PLAN.md)')
     if a.frames:
         frames(script, a.frames); sys.exit()
     need = (["GOOGLE_TTS_KEY"] if says else []) + ([] if script.get("source") else ["PIXABAY_API_KEY"])
