@@ -64,13 +64,16 @@ ZOOM_W, ZOOM_H, ZOOM_TOP = 1080, 960, 420  # top sits just under the 2-line titl
 ZOOM_MAX = 2.0  # closer than this gets blurry: a "box" without "zoom" is framed no tighter
 BOX_PAD = 0.08  # room kept around "box" on every side, as a share of its size
 
-def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, aspect=None):
+WIDEST = 4 / 3  # widest window shown: a flatter strip (letterboxed thin) looks cramped, so a wider box loses its sides
+
+def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, aspect=None, subject=None):
     """The part of the source shown sharp, (x0, y0, w, h) in source pixels: the bottom `cut` share is dropped (subtitles
     burned into the source), then a window 1/zoom of what is left, centred on the animal at cx, cy where it fits.
     Wide sources get a 9:8 window (shown 1080x960), narrow ones keep their own shape.
     box = [x0, y0, x1, y1] (0..1 of the source): everything that must stay in the picture for the whole scene - the
     character's full body, what it is after, other animals. The window always holds all of it (zoom only goes as close
-    as that allows; a box wider than 9:8 gets a wider window, shown letterboxed in the same band).
+    as that allows; a box wider than 9:8 gets a wider window, up to WIDEST, shown letterboxed in the same band).
+    A box wider still keeps its middle - or the "subject" (main character), which is never cut.
     aspect: the band's own shape instead of 9:8 (the pick style's 1080x810)."""
     uh = sh * (1 - cut)
     band = aspect or ZOOM_W / ZOOM_H
@@ -84,6 +87,13 @@ def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, aspect=None):
         w = max(w, bx1 - bx0, (by1 - by0) * a)
     w = min(w, sw)
     h = min(w / a, uh)
+    if w / h > WIDEST:
+        w = h * WIDEST
+        if subject:
+            sx0, sx1 = subject[0] * sw, subject[2] * sw
+            pw = (sx1 - sx0) * BOX_PAD
+            cx = (sx0 + sx1) / 2 / sw
+            w = min(max(w, sx1 - sx0 + 2 * pw), sw)
     return (round(min(max(cx * sw - w / 2, 0), sw - w)), round(min(max(cy * sh - h / 2, 0), uh - h)), round(w), round(h))
 
 def shown(sw, sh, cut, w, h):
@@ -97,8 +107,8 @@ def union(*boxes):
     boxes = [b for b in boxes if b]
     return [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)] if boxes else None
 
-def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
-    x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut, box)
+def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, subject=None):
+    x0, y0, w, h = window(sw, sh, cx, cy, zoom, cut, box, subject=subject)
     top, dh = shown(sw, sh, cut, w, h)
     return ("[0:v]split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,"
             f"eq=brightness=-0.12[bg];[b]crop={w}:{h}:{x0}:{y0},scale=1080:{dh}[fg];[bg][fg]overlay=0:{top},fps=30,setsar=1")
@@ -107,9 +117,9 @@ def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None):
 PICK_TOP = 520
 PICK_W, PICK_H = 1080, 810
 
-def fit_pick(sw, sh, cut=0.0, box=None, **_):
+def fit_pick(sw, sh, cut=0.0, box=None, subject=None, **_):
     """Wide source in the pick style: window() at 4:3 around "box", fitted into the 1080x810 band on white."""
-    x0, y0, w, h = window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0)
+    x0, y0, w, h = window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0, subject=subject)
     top, dh = pick_shown(w, h)
     return (f"[0:v]crop={w}:{h}:{x0}:{y0},scale=1080:{dh},setsar=1,"
             f"pad=1080:1920:0:{top}:white,fps=30")
@@ -277,8 +287,8 @@ def frames(script, outdir):
         if not starts:
             continue
         box = union(s.get("box"), s.get("subject"))
-        x0, y0, w, h = (window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0) if script.get("style") == "pick"
-                        else window(sw, sh, s.get("cx", 0.5), s.get("cy", 0.5), s.get("zoom"), cut, box))
+        x0, y0, w, h = (window(sw, sh, cut=cut, box=box, aspect=PICK_W / PICK_H, zoom=None if box else 1.0, subject=s.get("subject"))
+                        if script.get("style") == "pick" else window(sw, sh, s.get("cx", 0.5), s.get("cy", 0.5), s.get("zoom"), cut, box, subject=s.get("subject")))
         with tempfile.TemporaryDirectory() as tmp:
             shots = []
             for st in starts:
@@ -416,11 +426,13 @@ def make(script, out):
             cut = script.get("cut_bottom", 0.0)
             ch = sh * (1 - cut)  # source height left once burned-in subtitles are cut off
             # "subject" (the main character's whole body) always stays in the picture, whatever "box" says
-            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom"), cut=cut, box=union(s.get("box"), s.get("subject")))
+            view = lambda s: dict(cx=s.get("cx", 0.5), cy=s.get("cy", 0.5), zoom=s.get("zoom"), cut=cut,
+                                  box=union(s.get("box"), s.get("subject")), subject=s.get("subject"))
             def screen(x, y, s):
                 """Source-frame fraction -> output pixel, following fit() / FIT_PICK / FIT_PICK_V."""
                 if pick and not pick["vertical"]:  # fit_pick's window in the 1080x810 band
-                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H, zoom=None if view(s)["box"] else 1.0)
+                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H, zoom=None if view(s)["box"] else 1.0,
+                                          subject=s.get("subject"))
                     top, dh = pick_shown(w, h)
                     return round((x * sw - x0) / w * 1080), round(top + (y * sh - y0) / h * dh)
                 if pick:  # cover the whole screen
@@ -485,7 +497,7 @@ def make(script, out):
                     problems.append(f"scene {i} has no \"subject\" (the main character's whole body, or with \"cutaway\" "
                                     "the animal / thing it deals with)")
                 elif s.get("subject"):
-                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H if pick else None,
+                    x0, y0, w, h = window(sw, sh, cut=cut, box=view(s)["box"], aspect=PICK_W / PICK_H if pick else None, subject=s.get("subject"),
                                           zoom=s.get("zoom")) if not (pick and pick["vertical"]) else (0, 0, sw, ch)
                     b = s["subject"]
                     share = (b[2] - b[0]) * sw * (min(b[3] * sh, ch) - b[1] * sh) / (w * h)
