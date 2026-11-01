@@ -269,6 +269,14 @@ def clip_urls(scene, n, used):
     used.update(h["id"] for h in picked)
     return [h["videos"]["medium"]["url"] or h["videos"]["small"]["url"] for h in picked]
 
+def review_sheet(video):
+    """<video>.review.png: the finished Short at 2 frames a second, each stamped with its time - what upload.py's
+    --checked has to be written from (the title's moment must be on it)."""
+    out = os.path.splitext(video)[0] + ".review.png"
+    ff("-i", video, "-vf", "fps=2,scale=216:-2,drawtext=text='%{pts\\:hms}':x=6:y=6:fontsize=20:fontcolor=yellow:box=1:boxcolor=black,"
+       "tile=8x5", "-frames:v", "1", out)
+    return out
+
 def frames(script, outdir):
     """framing check, one image per scene (hook = scene 0 when there is one): source frames at the start, middle and end
     of every cut with the shown window drawn in green - the character's whole body, what it is after and the other
@@ -601,4 +609,6 @@ if __name__ == "__main__":
     out = make(script, a.out)
     d = duration(out)
     print(f"{out} ({d:.1f}s)")
+    review = review_sheet(out)
+    print(f"review {review}: open it and check the title against the picture before upload.py (PLAN.md 검수)")
     if d > script.get("max_len", MAX_LEN): sys.exit(f"too long: {d:.1f}s > {script.get('max_len', MAX_LEN)}s - cut scenes (aim for 15-20 s) and make it again")

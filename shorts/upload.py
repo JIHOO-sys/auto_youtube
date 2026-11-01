@@ -189,6 +189,8 @@ if __name__ == "__main__":
     p.add_argument("--title-ja", help="Japanese title (with --summary-ja: one-line Japanese description)")
     p.add_argument("--summary-ja"); p.add_argument("--title-en", help="English title"); p.add_argument("--summary-en")
     p.add_argument("--first", action="store_true", help="put it at the top of --playlist (character intro)")
+    p.add_argument("--checked", help="self-review, required with --episode: where the title's moment is seen on make.py's "
+                   "<video>.review.png, with seconds, e.g. '6~9초 아빠가 아들을 쫓아 뛰어감, 12초 발을 잡음'")
     p.add_argument("--episode", action="store_true", help="number the title as the series' next episode (needs --playlist); "
                    "also keeps a small copy in Drive for the weekly compilation")
     a = p.parse_args()
@@ -215,6 +217,12 @@ if __name__ == "__main__":
         d = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", a.video]))
         if d > 20.5:  # make.py's MAX_LEN; episodes are 16-18 s Shorts (character intros go up without --episode)
             p.error(f"episode is {d:.1f}s - over 20 s: cut it in the script and make it again")
+        # self-review (asked after 샤바니 #21: "전력질주" in the title, a walk on screen): the review sheet must exist
+        # and --checked must say at which seconds the title's moment is visible
+        if not os.path.exists(os.path.splitext(a.video)[0] + ".review.png"):
+            p.error("no <video>.review.png - make it with make.py and look at it first")
+        if not (a.checked and re.search(r"\d+(\.\d+)?\s*(~\s*\d+(\.\d+)?\s*)?초", a.checked)):
+            p.error("--checked '<n~m초 what is seen>' is required: where on the review sheet the title's moment shows")
         n = next_episode(a.playlist)
         a.title = episode_title(a.playlist, a.title, n)
         a.title_ja = a.title_ja and episode_title(a.playlist, a.title_ja, n, names.get("ja"))
