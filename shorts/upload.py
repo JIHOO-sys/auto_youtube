@@ -27,6 +27,10 @@ def access_token(drive=False):
         return json.load(r)["access_token"]
 
 # series names viewers abroad know them by; Japanese fans search the original channels' spellings
+# a series' episodes kept from repeating one subject (히마와리 kept eating ice: #39 #47 #48 #50): a title naming one of
+# these may not share it with the series' last TOPIC_WINDOW episodes
+TOPICS = ["얼음", "생선", "연어", "송어", "상추", "냉장고", "양동이", "칫솔", "치아", "체중", "줄자", "하품", "잠든", "낮잠", "자는 척", "청소", "눈사람", "눈밭"]
+TOPIC_WINDOW = 6
 PICK_WINDOW = 10  # --pick-turn looks at each series' last this many episodes
 SERIES_NAMES = {"수달 사쿠라": {"ja": "カワウソさくら", "en": "Sakura the Otter"},
                 "바다코끼리 히마와리": {"ja": "セイウチのヒマワリ", "en": "Himawari the Walrus"},
@@ -219,6 +223,12 @@ if __name__ == "__main__":
             p.error(f"episode is {d:.1f}s - over 20 s: cut it in the script and make it again")
         # self-review (asked after 샤바니 #21: "전력질주" in the title, a walk on screen): the review sheet must exist
         # and --checked must say at which seconds the title's moment is visible
+        mine = [t for t, _, _ in recent(status=True) if re.match(re.escape(a.playlist) + r" #\d+ \|", t)][:TOPIC_WINDOW]
+        body = lambda t: t.split(" | ", 1)[-1]
+        again = [w for w in TOPICS if w in a.title and any(w in body(t) for t in mine)]
+        if again:
+            p.error(f"{a.playlist}: {', '.join(again)} was already the subject in the last {TOPIC_WINDOW} episodes - "
+                    "pick another moment or source (PLAN.md 소재 돌리기)")
         if not os.path.exists(os.path.splitext(a.video)[0] + ".review.png"):
             p.error("no <video>.review.png - make it with make.py and look at it first")
         if not (a.checked and re.search(r"\d+(\.\d+)?\s*(~\s*\d+(\.\d+)?\s*)?초", a.checked)):
