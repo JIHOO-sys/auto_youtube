@@ -66,6 +66,19 @@ ZOOM_MAX = 2.0  # closer than this gets blurry: a "box" without "zoom" is framed
 BOX_PAD = 0.08  # room kept around "box" on every side, as a share of its size
 
 WIDEST = 4 / 3  # widest window shown: a flatter strip (letterboxed thin) looks cramped, so a wider box loses its sides
+BADGE_Y = ZOOM_TOP + 20
+NOTE_Y = 1385  # pick style: the comment line's top
+
+def tall(script):
+    """"tall": true (수달 사쿠라, asked 11/7: the picture looked short) - a taller picture, burned-in source subtitles may
+    show. Dub style: a 1080x1080 square from y 300, the 2-line title over its top edge, captions still under it at 1440.
+    Pick style: the band grows 810 -> 940 and the comment line moves down. Both always fill their band (no letterbox
+    unless the main character is wider). Sets the module layout, so call it before frames() / make()."""
+    global ZOOM_H, ZOOM_TOP, PICK_H, WIDEST, BADGE_Y, NOTE_Y
+    if script.get("tall"):
+        ZOOM_H, ZOOM_TOP, PICK_H, NOTE_Y = 1080, 300, 940, 1490
+        BADGE_Y = 430  # under the title, which now sits on the picture
+        WIDEST = (PICK_W / PICK_H) if script.get("style") == "pick" else ZOOM_W / ZOOM_H
 
 def window(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, aspect=None, subject=None):
     """The part of the source shown sharp, (x0, y0, w, h) in source pixels: the bottom `cut` share is dropped (subtitles
@@ -116,7 +129,7 @@ def fit(sw, sh, cx=0.5, cy=0.5, zoom=None, cut=0.0, box=None, subject=None):
 
 # "pick" style: picture in a 1080x810 band on white, header (brand + title) above, comment + credit below
 PICK_TOP = 520
-PICK_W, PICK_H = 1080, 810
+PICK_W, PICK_H = 1080, 810  # (tall() may change PICK_H; PICK_W stays)
 
 def fit_pick(sw, sh, cut=0.0, box=None, subject=None, **_):
     """Wide source in the pick style: window() at 4:3 around "box", fitted into the 1080x810 band on white."""
@@ -386,7 +399,7 @@ Style: Cap,Pretendard ExtraBold,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,0
 Style: PTitle,Pretendard ExtraBold,80,&H00000000,&H00000000,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,1430,1
 Style: PBrand,Pretendard ExtraBold,50,&H007E2EFF,&H007E2EFF,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,8,60,60,190,1
 Style: PCap,Pretendard ExtraBold,72,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,7,0,5,60,60,0,1
-Style: PNote,Pretendard ExtraBold,66,&H00000000,&H00000000,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,8,60,60,1385,1
+Style: PNote,Pretendard ExtraBold,66,&H00000000,&H00000000,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,8,60,60,NOTE_Y,1
 Style: PCredit,Pretendard ExtraBold,44,&H00777777,&H00777777,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,150,1
 Style: PNoteV,Pretendard ExtraBold,58,&H005AFF3C,&H005AFF3C,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,14,0,8,60,60,540,1
 Style: Outro,Pretendard ExtraBold,58,&H00FFFFFF,&H00FFFFFF,&H007E2EFF,&H00000000,0,0,0,0,100,100,0,0,3,18,0,7,0,0,0,1
@@ -397,7 +410,7 @@ Style: PCreditV,Pretendard ExtraBold,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+""".replace("NOTE_Y", str(NOTE_Y))
     end = end or (timeline[-1][1] if timeline else 0)  # pick scenes may carry no captions at all
     t = title.replace("\\n", "\n").replace("\n", r"\N")
     hl, base = (r"{\c&H7E2EFF&}", r"{\c&H000000&}") if pick else (YELLOW, r"{\c&HFFFFFF&}")
@@ -555,7 +568,7 @@ def make(script, out):
         ff("-f", "concat", "-safe", "0", "-i", lst("a.txt", aparts), "-c", "copy", os.path.join(tmp, "a.wav"))
         cap_y = (1480 if pick["vertical"] else PICK_TOP + 700) if pick else 1440 if script.get("source") else 1180
         # series badge ("샤바니 #12") pinned to the picture's top-left corner the whole time, so feed viewers learn the series
-        by = PICK_TOP + 20 if pick else ZOOM_TOP + 20
+        by = PICK_TOP + 20 if pick else BADGE_Y
         badge = [f"Dialogue: 2,{ts(0)},{ts(t)},Badge,,0,0,0,,{{\\pos(36,{by})}}{script['badge']}"] if script.get("badge") else []
         if script.get("prev"):  # part 2 of a 2-part story: one line on what happened in part 1
             badge.append(f"Dialogue: 2,{ts(0)},{ts(PREV_DUR)},Prev,,0,0,0,,{{\\pos(36,{by + 66})\\fad(0,200)}}{script['prev']}")
@@ -596,6 +609,7 @@ if __name__ == "__main__":
     # animal sources ("dub") have no voices of their own, so the inner-voice narration may sit anywhere
     if script.get("source") and not script.get("dub") and set(says) - {0, len(script["scenes"]) - 1}:
         sys.exit("narration only in the first and last scene; middle scenes must be orig")
+    tall(script)
     if a.frames:
         frames(script, a.frames); sys.exit()
     need = (["GOOGLE_TTS_KEY"] if says else []) + ([] if script.get("source") else ["PIXABAY_API_KEY"])

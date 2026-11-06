@@ -80,7 +80,7 @@ def api(url):
 def drive_ls(folder, mime=""):
     """Files (id, name, size) in the channel account's Drive folder with this name."""
     ls = lambda q: api("https://www.googleapis.com/drive/v3/files?" + urllib.parse.urlencode(
-        {"q": q + " and trashed=false", "pageSize": 1000, "fields": "files(id,name,size,mimeType,videoMediaMetadata(durationMillis))"}))["files"]
+        {"q": q + " and trashed=false", "pageSize": 1000, "fields": "files(id,name,size,mimeType,createdTime,videoMediaMetadata(durationMillis))"}))["files"]
     found = ls(f"name='{folder}' and mimeType='application/vnd.google-apps.folder'")
     if not found:
         return []
@@ -118,8 +118,10 @@ def drive_put(path, name, folder):
     with urllib.request.urlopen(req) as r:
         return json.load(r)["id"]
 
+ARCHIVE_KEEP = 60  # ~1 week of episodes
+
 def archive(path, vid):
-    """Keep a 1080p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~10MB; weekly.py trashes it after use),
+    """Keep a 1080p copy of an uploaded episode in ARCHIVE as <video id>.mp4 (~10MB; the newest ARCHIVE_KEEP stay),
     made from the outro-free render when make.py left one next to it."""
     small = path + ".archive.mp4"
     clean = os.path.splitext(path)[0] + ".no-outro.mp4"  # make.py's copy without the outro arrow, when there is one
@@ -129,6 +131,9 @@ def archive(path, vid):
         drive_put(small, f"{vid}.mp4", ARCHIVE)
     finally:
         os.remove(small)
+    # the weekly recap that used to clear these is stopped (11/7): keep the newest ARCHIVE_KEEP for checking uploads
+    for f in sorted(drive_ls(ARCHIVE, "video/"), key=lambda f: f.get("createdTime", ""), reverse=True)[ARCHIVE_KEEP:]:
+        drive_trash(f["id"])
 
 def drive_trash(file_id):
     """Move a Drive file to the trash (restorable for 30 days). Needs the full drive scope, not drive.readonly."""
