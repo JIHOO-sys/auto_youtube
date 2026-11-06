@@ -70,12 +70,12 @@ BADGE_Y = ZOOM_TOP + 20
 NOTE_Y = 1385  # pick style: the comment line's top
 
 def tall(script):
-    """"tall": true (수달 사쿠라, asked 11/7: the picture looked short) - a taller picture, burned-in source subtitles may
-    show. Dub style: a 1080x1080 square from y 300, the 2-line title over its top edge, captions still under it at 1440.
+    """The tall layout - every Short since 11/7 (asked for 수달 사쿠라 first: the picture looked short), "tall": false for
+    the old one - a taller picture, burned-in source subtitles may show. Dub style: a 1080x1080 square from y 300, the 2-line title over its top edge, captions still under it at 1440.
     Pick style: the band grows 810 -> 940 and the comment line moves down. Both always fill their band (no letterbox
     unless the main character is wider). Sets the module layout, so call it before frames() / make()."""
     global ZOOM_H, ZOOM_TOP, PICK_H, WIDEST, BADGE_Y, NOTE_Y
-    if script.get("tall"):
+    if script.get("tall", True):
         ZOOM_H, ZOOM_TOP, PICK_H, NOTE_Y = 1080, 300, 940, 1490
         BADGE_Y = 430  # under the title, which now sits on the picture
         WIDEST = (PICK_W / PICK_H) if script.get("style") == "pick" else ZOOM_W / ZOOM_H
